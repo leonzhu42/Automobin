@@ -36,14 +36,29 @@
 		</Style>
 	</Window.Resources>
 	
-	<Grid>
-		<Viewbox Grid.Row="1" Stretch="Uniform" HorizontalAlignment="Center">
-			<Image Name="Image" Width="640" Height="480"/>
+	<Grid Grid.Row="2" Grid.Column="3" Height="735">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="240"></RowDefinition>
+			<RowDefinition Height="240"></RowDefinition>
+		</Grid.RowDefinitions>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="320"></ColumnDefinition>
+			<ColumnDefinition Width="320"></ColumnDefinition>
+			<ColumnDefinition></ColumnDefinition>
+		</Grid.ColumnDefinitions>
+		<Viewbox Grid.Row="0" Grid.Column="0" Stretch="Uniform"  HorizontalAlignment="Center">
+			<Image Name="DepthImage"/>
 		</Viewbox>
-		<Button Grid.Row="2" Style="{StaticResource SnapshotButton}" Content="Screenshot" Height="Auto" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="10 10 0 10" Name="buttonScreenshot"  Click="ButtonScreenshotClick" />
-		<StatusBar Grid.Row="3" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
+		<Viewbox Grid.Row="0" Grid.Column="1" Stretch="Uniform"  HorizontalAlignment="Center">
+			<Image Name="ColorImage" Width="320" Height="240"/>
+		</Viewbox>
+		<Button Grid.Row="0" Grid.Column="2" Style="{StaticResource SnapshotButton}" Content="Screenshot" Height="Auto" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10 10 5 30" Name="buttonScreenshot"  Click="ButtonScreenshotClick" />
+		<Viewbox Grid.Row="1" Grid.Column="0" Stretch="Uniform" HorizontalAlignment="Center">
+			<Image Name="SkeletonImage" Width="320" Height="240"/>
+		</Viewbox>
+		<StatusBar Grid.Row="1" Grid.Column="2" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
 			<StatusBarItem Padding="0 0 0 10">
-				<TextBlock Name="statusBarText" Margin="-1 0 0 0">Press 'Screenshot' to save a screenshot to your 'My Pictures' directory.</TextBlock>
+				<TextBlock Name="statusBarText" Margin="1 0 0 0">Press 'Screenshot' to save a screenshot to your 'My Pictures' directory.</TextBlock>
 			</StatusBarItem>
 		</StatusBar>
 	</Grid>
