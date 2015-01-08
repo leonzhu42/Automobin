@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Automobin.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Depth" Height="735" Width="770" Loaded="WindowLoaded" Closing="WindowClosing">
+        Title="Inspection View" Height="735" Width="770" Loaded="WindowLoaded" Closing="WindowClosing">
 	
 	<Window.Resources>
 		<SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e"/>

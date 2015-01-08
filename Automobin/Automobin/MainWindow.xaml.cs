@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -47,7 +48,11 @@ namespace Automobin
 		private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
 		private DrawingGroup drawingGroup;
 		private DrawingImage skeletonImage;
-
+		//Motion tracking
+		private static int MaxFeatures = 200;
+		private static double NormThreshold = 0;
+		bool firstRun = true;
+		
 		public MainWindow()
 		{
 			InitializeComponent();
@@ -76,9 +81,10 @@ namespace Automobin
 				this.DepthImage.Source = this.depthColorBitmap;
 				this.ColorImage.Source = this.colorColorBitmap;
 				this.SkeletonImage.Source = this.skeletonImage;
-				this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
-				this.sensor.ColorFrameReady += this.SensorColorFrameReady;
-				this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
+				//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
+				//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
+				//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
+				this.sensor.AllFramesReady += this.SensorAllFramesReady;
 				try
 				{
 					this.sensor.Start();
@@ -98,8 +104,11 @@ namespace Automobin
 				this.sensor.Stop();
 		}
 
+		/*
 		private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
 		{
+			BitmapSource colorBitmap;
+			bool firstRun = true;
 			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
 			{
 				if(colorFrame != null)
@@ -110,6 +119,14 @@ namespace Automobin
 						this.colorColorPixels,
 						this.colorColorBitmap.PixelWidth * sizeof(int),
 						0);
+					
+					//Convert frame into OpenCV image
+					colorBitmap = colorFrame.SliceColorImage();
+					currImage = new Image<Bgr, Byte>(colorBitmap.ToBitmap());
+					
+					//Lucas Kanade
+
+					
 				}
 			}
 		}
@@ -169,41 +186,7 @@ namespace Automobin
 			}
 		}
 
-		private static void RenderClippedEdges(Skeleton skeleton, DrawingContext drawingContext)
-		{
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Bottom))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, RenderHeight - ClipBoundsThickness, RenderWidth, ClipBoundsThickness));
-			}
-
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Top))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, 0, RenderWidth, ClipBoundsThickness));
-			}
-
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Left))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, 0, ClipBoundsThickness, RenderHeight));
-			}
-
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Right))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(RenderWidth - ClipBoundsThickness, 0, ClipBoundsThickness, RenderHeight));
-			}
-		}
-
+		
 		private void SensorSkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
 		{
 			Skeleton[] skeletons = new Skeleton[0];
@@ -238,6 +221,147 @@ namespace Automobin
 					}
 				}
 				this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+			}
+		}
+		*/
+
+		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
+		{
+			BitmapSource colorBitmap;
+			Skeleton[] skeletons = new Skeleton[0];
+			Image<Gray, Byte> prev, curr;
+
+			bool firstRun = true;
+
+			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
+			{
+				if(colorFrame != null)
+				{
+					using(DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+					{
+						if(depthFrame != null)
+						{
+							//Get the skeletons
+							using(SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
+							{
+								if(skeletonFrame != null)
+								{
+									skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
+									skeletonFrame.CopySkeletonDataTo(skeletons);
+								}
+							}
+
+							//Draw the skeletons
+							using(DrawingContext dc = this.drawingGroup.Open())
+							{
+								dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+
+								if(skeletons.Length != 0)
+								{
+									foreach (Skeleton skel in skeletons)
+									{
+										RenderClippedEdges(skel, dc);
+										if (skel.TrackingState == SkeletonTrackingState.Tracked)
+											this.DrawBonesAndJoints(skel, dc);
+										else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
+											dc.DrawEllipse(
+												this.centerPointBrush,
+												null,
+												this.SkeletonPointToScreen(skel.Position),
+												BodyCenterThickness,
+												BodyCenterThickness);
+									}
+								}
+								this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+							}
+
+							//Get the depth bitmap
+							depthColorBitmap = new WriteableBitmap(depthFrame.SliceDepthImage());
+
+							//Get the color bitmap
+							colorColorBitmap = new WriteableBitmap(colorFrame.SliceColorImage());
+
+							//Lucas-Kanade
+							if (firstRun)
+								firstRun = false;
+							else
+							{
+								curr = new Image<Bgr, Byte>(colorColorBitmap.ToBitmap()).Convert<Gray, Byte>();
+
+								Image<Bgr, Byte> eigImage = new Image<Bgr, Byte>(prev.Size);
+								Image<Bgr, Byte> tmpImage = new Image<Bgr, Byte>(prev.Size);
+								int featureCount = MaxFeatures;
+								System.Drawing.PointF[] prevFeatures = new System.Drawing.PointF[MaxFeatures];
+								GCHandle hObject = GCHandle.Alloc(prevFeatures, GCHandleType.Pinned);
+								IntPtr pObject = hObject.AddrOfPinnedObject();
+								CvInvoke.cvGoodFeaturesToTrack(prev.Ptr, eigImage.Ptr, tmpImage.Ptr, pObject, ref featureCount, 0.01, 0.5, IntPtr.Zero, 3, 0, 0.04);
+
+								MCvTermCriteria criteria = new MCvTermCriteria(20, 0.03);
+								criteria.type = Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_EPS | Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_ITER;
+
+								System.Drawing.Size size1 = new System.Drawing.Size(10, 10);
+								System.Drawing.Size size2 = new System.Drawing.Size(-1, -1);
+								CvInvoke.cvFindCornerSubPix(prev, prevFeatures, featureCount, size1, size2, criteria);
+								System.Drawing.PointF[] currFeatures = new System.Drawing.PointF[MaxFeatures];
+								Byte[] status = new Byte[MaxFeatures];
+								float[] trackError = new float[MaxFeatures];
+
+								System.Drawing.Size winSize = new System.Drawing.Size(prev.Width + 8, curr.Height / 3);
+
+								Image<Bgr, Int32> prevPyrBuffer = new Image<Bgr, Int32>(winSize);
+								Image<Bgr, Int32> currPyrBuffer = new Image<Bgr, Int32>(winSize);
+								CvInvoke.cvCalcOpticalFlowPyrLK(prev, curr, prevPyrBuffer, currPyrBuffer, prevFeatures, currFeatures, featureCount, size1, 5, status, trackError, criteria, Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
+
+								List<PlaneVector> vectors = new List<PlaneVector>();
+								for(int i = 0; i < featureCount; i++)
+								{
+									if (status[i] != 1 || trackError[i] > 550)
+										continue;
+									PlaneVector planeVector = new PlaneVector(prevFeatures[i], currFeatures[i]);
+									if(planeVector.getNorm() >= NormThreshold)
+									{
+										vectors.Add(planeVector);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		 
+		private static void RenderClippedEdges(Skeleton skeleton, DrawingContext drawingContext)
+		{
+			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Bottom))
+			{
+				drawingContext.DrawRectangle(
+					Brushes.Red,
+					null,
+					new Rect(0, RenderHeight - ClipBoundsThickness, RenderWidth, ClipBoundsThickness));
+			}
+
+			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Top))
+			{
+				drawingContext.DrawRectangle(
+					Brushes.Red,
+					null,
+					new Rect(0, 0, RenderWidth, ClipBoundsThickness));
+			}
+
+			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Left))
+			{
+				drawingContext.DrawRectangle(
+					Brushes.Red,
+					null,
+					new Rect(0, 0, ClipBoundsThickness, RenderHeight));
+			}
+
+			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Right))
+			{
+				drawingContext.DrawRectangle(
+					Brushes.Red,
+					null,
+					new Rect(RenderWidth - ClipBoundsThickness, 0, ClipBoundsThickness, RenderHeight));
 			}
 		}
 
@@ -378,6 +502,5 @@ namespace Automobin
 				}
 			}
 		}
-
 	}
 }
