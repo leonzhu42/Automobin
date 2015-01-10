@@ -227,9 +227,9 @@ namespace Automobin
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
-			BitmapSource colorBitmap;
 			Skeleton[] skeletons = new Skeleton[0];
-			Image<Gray, Byte> prev, curr;
+			Image<Gray, Byte> prev = new Image<Gray, Byte>(0, 0, new Gray(0));
+			Image<Gray, Byte> curr = new Image<Gray, Byte>(0, 0, new Gray(0));
 
 			bool firstRun = true;
 
@@ -313,16 +313,17 @@ namespace Automobin
 								CvInvoke.cvCalcOpticalFlowPyrLK(prev, curr, prevPyrBuffer, currPyrBuffer, prevFeatures, currFeatures, featureCount, size1, 5, status, trackError, criteria, Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
 
 								List<PlaneVector> vectors = new List<PlaneVector>();
-								for(int i = 0; i < featureCount; i++)
+								for (int i = 0; i < featureCount; i++)
 								{
 									if (status[i] != 1 || trackError[i] > 550)
 										continue;
 									PlaneVector planeVector = new PlaneVector(prevFeatures[i], currFeatures[i]);
-									if(planeVector.getNorm() >= NormThreshold)
+									if (planeVector.getNorm() >= NormThreshold)
 									{
 										vectors.Add(planeVector);
 									}
 								}
+								prev = curr;
 							}
 						}
 					}
