@@ -78,13 +78,14 @@ namespace Automobin
 				this.colorColorPixels = new byte[this.sensor.ColorStream.FramePixelDataLength];
 				this.depthColorBitmap = new WriteableBitmap(this.sensor.DepthStream.FrameWidth, this.sensor.DepthStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
 				this.colorColorBitmap = new WriteableBitmap(this.sensor.ColorStream.FrameWidth, this.sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
-				this.DepthImage.Source = this.depthColorBitmap;
-				this.ColorImage.Source = this.colorColorBitmap;
+				//this.DepthImage.Source = this.depthColorBitmap;
+				//this.ColorImage.Source = this.colorColorBitmap;
 				this.SkeletonImage.Source = this.skeletonImage;
 				//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
 				//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
 				//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
 				this.sensor.AllFramesReady += this.SensorAllFramesReady;
+				CvInvoke.cvNamedWindow("Motion Tracking");
 				try
 				{
 					this.sensor.Start();
@@ -231,8 +232,6 @@ namespace Automobin
 			Image<Gray, Byte> prev = new Image<Gray, Byte>(0, 0, new Gray(0));
 			Image<Gray, Byte> curr = new Image<Gray, Byte>(0, 0, new Gray(0));
 
-			bool firstRun = true;
-
 			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
 			{
 				if(colorFrame != null)
@@ -280,7 +279,7 @@ namespace Automobin
 
 							//Get the color bitmap
 							colorColorBitmap = new WriteableBitmap(colorFrame.SliceColorImage());
-
+							
 							//Lucas-Kanade
 							if (firstRun)
 								firstRun = false;
@@ -294,14 +293,29 @@ namespace Automobin
 								System.Drawing.PointF[] prevFeatures = new System.Drawing.PointF[MaxFeatures];
 								GCHandle hObject = GCHandle.Alloc(prevFeatures, GCHandleType.Pinned);
 								IntPtr pObject = hObject.AddrOfPinnedObject();
-								CvInvoke.cvGoodFeaturesToTrack(prev.Ptr, eigImage.Ptr, tmpImage.Ptr, pObject, ref featureCount, 0.01, 0.5, IntPtr.Zero, 3, 0, 0.04);
+								CvInvoke.cvGoodFeaturesToTrack(
+									prev.Ptr,
+									eigImage.Ptr,
+									tmpImage.Ptr,
+									pObject,
+									ref featureCount,
+									0.01,
+									0.5,
+									IntPtr.Zero,
+									3,
+									0,
+									0.04);
 
 								MCvTermCriteria criteria = new MCvTermCriteria(20, 0.03);
 								criteria.type = Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_EPS | Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_ITER;
 
-								System.Drawing.Size size1 = new System.Drawing.Size(10, 10);
-								System.Drawing.Size size2 = new System.Drawing.Size(-1, -1);
-								CvInvoke.cvFindCornerSubPix(prev, prevFeatures, featureCount, size1, size2, criteria);
+								CvInvoke.cvFindCornerSubPix(
+									prev,
+									prevFeatures,
+									featureCount,
+									new System.Drawing.Size(10, 10),
+									new System.Drawing.Size(-1, -1),
+									criteria);
 								System.Drawing.PointF[] currFeatures = new System.Drawing.PointF[MaxFeatures];
 								Byte[] status = new Byte[MaxFeatures];
 								float[] trackError = new float[MaxFeatures];
@@ -310,7 +324,20 @@ namespace Automobin
 
 								Image<Bgr, Int32> prevPyrBuffer = new Image<Bgr, Int32>(winSize);
 								Image<Bgr, Int32> currPyrBuffer = new Image<Bgr, Int32>(winSize);
-								CvInvoke.cvCalcOpticalFlowPyrLK(prev, curr, prevPyrBuffer, currPyrBuffer, prevFeatures, currFeatures, featureCount, size1, 5, status, trackError, criteria, Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
+								CvInvoke.cvCalcOpticalFlowPyrLK(
+									prev,
+									curr,
+									prevPyrBuffer,
+									currPyrBuffer,
+									prevFeatures,
+									currFeatures,
+									featureCount,
+									new System.Drawing.Size(10, 10),
+									5,
+									status,
+									trackError,
+									criteria,
+									Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
 
 								List<PlaneVector> vectors = new List<PlaneVector>();
 								for (int i = 0; i < featureCount; i++)
@@ -324,6 +351,7 @@ namespace Automobin
 									}
 								}
 								prev = curr;
+								CvInvoke.cvShowImage("Motion Tracking", curr);
 							}
 						}
 					}

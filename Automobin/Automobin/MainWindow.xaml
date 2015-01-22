@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Automobin.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inspection View" Height="735" Width="770" Loaded="WindowLoaded" Closing="WindowClosing">
+        Title="Skeleton Tracking" Height="735" Width="770" Loaded="WindowLoaded" Closing="WindowClosing">
 
 	<Window.Resources>
 		<SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e"/>
@@ -36,30 +36,16 @@
 		</Style>
 	</Window.Resources>
 
-	<Grid Grid.Row="3" Grid.Column="2" Height="735">
-		<Grid.RowDefinitions>
-			<RowDefinition Height="240"></RowDefinition>
-			<RowDefinition Height="240"></RowDefinition>
-			<RowDefinition Height="20"></RowDefinition>
-		</Grid.RowDefinitions>
-		<Grid.ColumnDefinitions>
-			<ColumnDefinition Width="313"></ColumnDefinition>
-			<ColumnDefinition Width="313"></ColumnDefinition>
-			<ColumnDefinition></ColumnDefinition>
-		</Grid.ColumnDefinitions>
-		<Viewbox Grid.Row="0" Grid.Column="0" Stretch="Uniform"  HorizontalAlignment="Center" Margin="152,0,161,0" Width="0">
-			<Image Name="DepthImage"/>
+	<Grid>
+		<Viewbox Stretch="Uniform" HorizontalAlignment="Center">
+			<Image Name="SkeletonImage"/>
 		</Viewbox>
-		<Viewbox Grid.Row="0" Grid.Column="1" Stretch="Uniform"  HorizontalAlignment="Center" Margin="312,0,14,0" Width="0">
-			<Image Name="ColorImage"/>
-		</Viewbox>
-		<Button Grid.Row="2" Grid.Column="2" Style="{StaticResource SnapshotButton}" Content="Screenshot" Height="32" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,-192" Name="buttonScreenshot"  Click="ButtonScreenshotClick" Width="120" />
-		<Viewbox Grid.Row="1" Grid.Column="0" Stretch="Uniform" HorizontalAlignment="Center" Width="320" Grid.ColumnSpan="2" Margin="-2,0,308,0">
-			<Image Name="SkeletonImage" Width="320" Height="240"/>
-		</Viewbox>
-		<StatusBar Grid.Row="2" Grid.Column="0" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}" Height="26">
+		<StatusBar HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}" Height="40">
 			<StatusBarItem Padding="0 0 0 10">
 				<TextBlock Name="statusBarText" Margin="1 0 0 0">Press 'Screenshot' to save a screenshot to your 'My Pictures' directory.</TextBlock>
+			</StatusBarItem>
+			<StatusBarItem>
+				<Button Style="{StaticResource SnapshotButton}" Content="Screenshot" Height="35" HorizontalAlignment="Right"  VerticalAlignment="Bottom" Name="buttonScreenshot"  Click="ButtonScreenshotClick" Width="120" />
 			</StatusBarItem>
 		</StatusBar>
 	</Grid>
