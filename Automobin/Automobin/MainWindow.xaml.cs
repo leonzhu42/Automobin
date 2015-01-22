@@ -20,6 +20,7 @@ using Emgu.CV;
 using Emgu.Util;
 using Emgu.CV.Structure;
 using Emgu.CV.Features2D;
+using ImageManipulationExtensionMethods;
 
 namespace Automobin
 {
@@ -49,10 +50,13 @@ namespace Automobin
 		private DrawingGroup drawingGroup;
 		private DrawingImage skeletonImage;
 		//Motion tracking
-		private static int MaxFeatures = 200;
-		private static double NormThreshold = 0;
+		private static int MaxFeatures = 100;
+		private static double NormThreshold = 5;
 		bool firstRun = true;
-		
+		Image<Gray, Byte> prev = new Image<Gray, Byte>(0, 0, new Gray(0));
+		Image<Gray, Byte> curr = new Image<Gray, Byte>(0, 0, new Gray(0));
+		Image<Bgr, Byte> displayedImage;
+
 		public MainWindow()
 		{
 			InitializeComponent();
@@ -229,8 +233,6 @@ namespace Automobin
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
 			Skeleton[] skeletons = new Skeleton[0];
-			Image<Gray, Byte> prev = new Image<Gray, Byte>(0, 0, new Gray(0));
-			Image<Gray, Byte> curr = new Image<Gray, Byte>(0, 0, new Gray(0));
 
 			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
 			{
@@ -274,19 +276,15 @@ namespace Automobin
 								this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
 							}
 
-							//Get the depth bitmap
-							depthColorBitmap = new WriteableBitmap(depthFrame.SliceDepthImage());
-
-							//Get the color bitmap
-							colorColorBitmap = new WriteableBitmap(colorFrame.SliceColorImage());
-							
 							//Lucas-Kanade
+							displayedImage = colorFrame.ToOpenCVImage<Bgr, Byte>();
+							curr = colorFrame.ToOpenCVImage<Gray, Byte>();
 							if (firstRun)
 								firstRun = false;
 							else
 							{
-								curr = new Image<Bgr, Byte>(colorColorBitmap.ToBitmap()).Convert<Gray, Byte>();
-
+								//CvInvoke.cvShowImage("prev", prev);
+								//CvInvoke.cvShowImage("curr", curr);
 								Image<Bgr, Byte> eigImage = new Image<Bgr, Byte>(prev.Size);
 								Image<Bgr, Byte> tmpImage = new Image<Bgr, Byte>(prev.Size);
 								int featureCount = MaxFeatures;
@@ -340,6 +338,7 @@ namespace Automobin
 									Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
 
 								List<PlaneVector> vectors = new List<PlaneVector>();
+								MCvScalar color = new MCvScalar(0, 0, 255);
 								for (int i = 0; i < featureCount; i++)
 								{
 									if (status[i] != 1 || trackError[i] > 550)
@@ -348,11 +347,14 @@ namespace Automobin
 									if (planeVector.getNorm() >= NormThreshold)
 									{
 										vectors.Add(planeVector);
+										System.Drawing.Point prevPoint = new System.Drawing.Point((int)prevFeatures[i].X, (int)prevFeatures[i].Y);
+										System.Drawing.Point currPoint = new System.Drawing.Point((int)currFeatures[i].X, (int)currFeatures[i].Y);
+										CvInvoke.cvLine(displayedImage, prevPoint, currPoint, color, 2, Emgu.CV.CvEnum.LINE_TYPE.CV_AA, 0);
 									}
 								}
-								prev = curr;
-								CvInvoke.cvShowImage("Motion Tracking", curr);
+								CvInvoke.cvShowImage("Motion Tracking", displayedImage);
 							}
+							prev = curr.Copy();
 						}
 					}
 				}
