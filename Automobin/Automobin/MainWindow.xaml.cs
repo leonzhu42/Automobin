@@ -29,13 +29,18 @@ namespace Automobin
 	/// </summary>
 	public partial class MainWindow : Window
 	{
+		//Kinect sensor
 		private KinectSensor sensor;
-		//Depth and color images
-		private WriteableBitmap depthColorBitmap;
-		private WriteableBitmap colorColorBitmap;
+		//Current state
+		//0: Standby
+		//1: Running
+		private int state = 0;
+		//Depth images
 		private DepthImagePixel[] depthPixels;
+		private WriteableBitmap depthColorBitmap;
 		private byte[] depthColorPixels;
-		private byte[] colorColorPixels;
+		private int frameWidth;
+		private int frameHeight;
 		//Skeleton image
 		private const float RenderWidth = 640.0f;
 		private const float RenderHeight = 480.0f;
@@ -49,13 +54,16 @@ namespace Automobin
 		private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
 		private DrawingGroup drawingGroup;
 		private DrawingImage skeletonImage;
-		//Motion tracking
-		private static int MaxFeatures = 100;
-		private static double NormThreshold = 5;
-		bool firstRun = true;
-		Image<Gray, Byte> prev = new Image<Gray, Byte>(0, 0, new Gray(0));
-		Image<Gray, Byte> curr = new Image<Gray, Byte>(0, 0, new Gray(0));
-		Image<Bgr, Byte> displayedImage;
+		//Hand Positions
+		private DepthImagePoint rightHandDepthPoint;
+		private SkeletonPoint rightHandSkeletonPoint;
+		private DepthImagePoint leftHandDepthPoint;
+		private SkeletonPoint leftHandSkeletonPoint;
+		//Trash Position
+		private DepthImagePoint trashDepthPoint;
+		private List<DepthImagePoint> trashDepthPoints;
+		//Thresholds
+		private static double LandingThreshold = 5.0;
 
 		public MainWindow()
 		{
@@ -79,9 +87,6 @@ namespace Automobin
 				this.sensor.SkeletonStream.Enable();
 				this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
 				this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
-				this.colorColorPixels = new byte[this.sensor.ColorStream.FramePixelDataLength];
-				this.depthColorBitmap = new WriteableBitmap(this.sensor.DepthStream.FrameWidth, this.sensor.DepthStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
-				this.colorColorBitmap = new WriteableBitmap(this.sensor.ColorStream.FrameWidth, this.sensor.ColorStream.FrameHeight, 96.0, 96.0, PixelFormats.Bgr32, null);
 				//this.DepthImage.Source = this.depthColorBitmap;
 				//this.ColorImage.Source = this.colorColorBitmap;
 				this.SkeletonImage.Source = this.skeletonImage;
@@ -89,7 +94,7 @@ namespace Automobin
 				//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
 				//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
 				this.sensor.AllFramesReady += this.SensorAllFramesReady;
-				CvInvoke.cvNamedWindow("Motion Tracking");
+
 				try
 				{
 					this.sensor.Start();
@@ -234,133 +239,91 @@ namespace Automobin
 		{
 			Skeleton[] skeletons = new Skeleton[0];
 
-			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
-			{
-				if(colorFrame != null)
+
+				using(DepthImageFrame depthFrame = e.OpenDepthImageFrame())
 				{
-					using(DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+					if(depthFrame != null)
 					{
-						if(depthFrame != null)
+						frameWidth = depthFrame.Width;
+						frameHeight = depthFrame.Height;
+						//Get the skeletons
+						using(SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
 						{
-							//Get the skeletons
-							using(SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
+							if(skeletonFrame != null)
 							{
-								if(skeletonFrame != null)
-								{
-									skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
-									skeletonFrame.CopySkeletonDataTo(skeletons);
-								}
+								skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
+								skeletonFrame.CopySkeletonDataTo(skeletons);
 							}
-
-							//Draw the skeletons
-							using(DrawingContext dc = this.drawingGroup.Open())
-							{
-								dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-
-								if(skeletons.Length != 0)
-								{
-									foreach (Skeleton skel in skeletons)
-									{
-										RenderClippedEdges(skel, dc);
-										if (skel.TrackingState == SkeletonTrackingState.Tracked)
-											this.DrawBonesAndJoints(skel, dc);
-										else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
-											dc.DrawEllipse(
-												this.centerPointBrush,
-												null,
-												this.SkeletonPointToScreen(skel.Position),
-												BodyCenterThickness,
-												BodyCenterThickness);
-									}
-								}
-								this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-							}
-
-							//Lucas-Kanade
-							displayedImage = colorFrame.ToOpenCVImage<Bgr, Byte>();
-							curr = colorFrame.ToOpenCVImage<Gray, Byte>();
-							if (firstRun)
-								firstRun = false;
-							else
-							{
-								//CvInvoke.cvShowImage("prev", prev);
-								//CvInvoke.cvShowImage("curr", curr);
-								Image<Bgr, Byte> eigImage = new Image<Bgr, Byte>(prev.Size);
-								Image<Bgr, Byte> tmpImage = new Image<Bgr, Byte>(prev.Size);
-								int featureCount = MaxFeatures;
-								System.Drawing.PointF[] prevFeatures = new System.Drawing.PointF[MaxFeatures];
-								GCHandle hObject = GCHandle.Alloc(prevFeatures, GCHandleType.Pinned);
-								IntPtr pObject = hObject.AddrOfPinnedObject();
-								CvInvoke.cvGoodFeaturesToTrack(
-									prev.Ptr,
-									eigImage.Ptr,
-									tmpImage.Ptr,
-									pObject,
-									ref featureCount,
-									0.01,
-									0.5,
-									IntPtr.Zero,
-									3,
-									0,
-									0.04);
-
-								MCvTermCriteria criteria = new MCvTermCriteria(20, 0.03);
-								criteria.type = Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_EPS | Emgu.CV.CvEnum.TERMCRIT.CV_TERMCRIT_ITER;
-
-								CvInvoke.cvFindCornerSubPix(
-									prev,
-									prevFeatures,
-									featureCount,
-									new System.Drawing.Size(10, 10),
-									new System.Drawing.Size(-1, -1),
-									criteria);
-								System.Drawing.PointF[] currFeatures = new System.Drawing.PointF[MaxFeatures];
-								Byte[] status = new Byte[MaxFeatures];
-								float[] trackError = new float[MaxFeatures];
-
-								System.Drawing.Size winSize = new System.Drawing.Size(prev.Width + 8, curr.Height / 3);
-
-								Image<Bgr, Int32> prevPyrBuffer = new Image<Bgr, Int32>(winSize);
-								Image<Bgr, Int32> currPyrBuffer = new Image<Bgr, Int32>(winSize);
-								CvInvoke.cvCalcOpticalFlowPyrLK(
-									prev,
-									curr,
-									prevPyrBuffer,
-									currPyrBuffer,
-									prevFeatures,
-									currFeatures,
-									featureCount,
-									new System.Drawing.Size(10, 10),
-									5,
-									status,
-									trackError,
-									criteria,
-									Emgu.CV.CvEnum.LKFLOW_TYPE.DEFAULT);
-
-								List<PlaneVector> vectors = new List<PlaneVector>();
-								MCvScalar color = new MCvScalar(0, 0, 255);
-								for (int i = 0; i < featureCount; i++)
-								{
-									if (status[i] != 1 || trackError[i] > 550)
-										continue;
-									PlaneVector planeVector = new PlaneVector(prevFeatures[i], currFeatures[i]);
-									if (planeVector.getNorm() >= NormThreshold)
-									{
-										vectors.Add(planeVector);
-										System.Drawing.Point prevPoint = new System.Drawing.Point((int)prevFeatures[i].X, (int)prevFeatures[i].Y);
-										System.Drawing.Point currPoint = new System.Drawing.Point((int)currFeatures[i].X, (int)currFeatures[i].Y);
-										CvInvoke.cvLine(displayedImage, prevPoint, currPoint, color, 2, Emgu.CV.CvEnum.LINE_TYPE.CV_AA, 0);
-									}
-								}
-								CvInvoke.cvShowImage("Motion Tracking", displayedImage);
-							}
-							prev = curr.Copy();
 						}
+
+						//Draw the skeletons
+						using(DrawingContext dc = this.drawingGroup.Open())
+						{
+							dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+
+							if(skeletons.Length != 0)
+							{
+								foreach (Skeleton skel in skeletons)
+								{
+									RenderClippedEdges(skel, dc);
+									if (skel.TrackingState == SkeletonTrackingState.Tracked)
+										this.DrawBonesAndJoints(skel, dc);
+									else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
+										dc.DrawEllipse(
+											this.centerPointBrush,
+											null,
+											this.SkeletonPointToScreen(skel.Position),
+											BodyCenterThickness,
+											BodyCenterThickness);
+								}
+							}
+							this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+						}
+
+						//Check the state
+						if(state == 0)
+						{
+							//Standby. Check whether any object nearby is at approximately the same depth as user's hand.
+							//Choose the skeleton to track
+							Skeleton skeleton = (from s in skeletons
+												 where s.TrackingState == SkeletonTrackingState.Tracked
+												 select s).FirstOrDefault();
+							//Right hand
+							Joint rightHand = skeleton.Joints[JointType.HandRight];
+							rightHandSkeletonPoint = rightHand.Position;
+							rightHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(rightHandSkeletonPoint, sensor.DepthStream.Format);
+							//Left hand
+							Joint leftHand = skeleton.Joints[JointType.HandLeft];
+							leftHandSkeletonPoint = leftHand.Position;
+							leftHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(leftHandSkeletonPoint, sensor.DepthStream.Format);
+
+							DepthImagePoint[] handDepthPoints = { rightHandDepthPoint, leftHandDepthPoint };
+							
+							//Look for object nearby
+							bool trashFound = false;
+							FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
+							if (trashFound)
+							{
+								trashDepthPoints = new List<DepthImagePoint>();
+								trashDepthPoints.Add(trashDepthPoint);
+								state = 1;
+							}
+						}
+						else
+						{
+							//Running. Keep tracking the object, communicate with the bin, until caught by the bin.
+							UpdateTrashLocation(ref trashDepthPoint);
+							trashDepthPoints.Add(trashDepthPoint);
+							DepthImagePoint landingPoint = PredictLandingPoint(trashDepthPoints);
+							SendLocationToBin(landingPoint);
+							if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
+								state = 0;
+						}
+
 					}
 				}
-			}
 		}
-		 
+		
 		private static void RenderClippedEdges(Skeleton skeleton, DrawingContext drawingContext)
 		{
 			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Bottom))
@@ -507,27 +470,6 @@ namespace Automobin
 					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteSuccess, path);
 				}
 				catch (IOException)
-				{
-					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteFailed, path);
-				}
-			}
-			//Save color image
-			{
-				BitmapEncoder encoder = new PngBitmapEncoder();
-				encoder.Frames.Add(BitmapFrame.Create(this.colorColorBitmap));
-				string time = System.DateTime.Now.ToString("hh'-'mm'-'ss", CultureInfo.CurrentCulture.DateTimeFormat);
-				string myPhotos = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-				string path = System.IO.Path.Combine(myPhotos, "Color " + time + ".png");
-
-				try
-				{
-					using(FileStream fs = new FileStream(path, FileMode.Create))
-					{
-						encoder.Save(fs);
-					}
-					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteSuccess, path);
-				}
-				catch(IOException)
 				{
 					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteFailed, path);
 				}
