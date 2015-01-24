@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
@@ -20,6 +21,8 @@ using Emgu.CV;
 using Emgu.Util;
 using Emgu.CV.Structure;
 using Emgu.CV.Features2D;
+using Newtonsoft.Json;
+using TCPServer;
 using ImageManipulationExtensionMethods;
 
 namespace Automobin
@@ -31,6 +34,8 @@ namespace Automobin
 	{
 		//Kinect sensor
 		private KinectSensor sensor;
+		//Server
+		private Server server;
 		//Current state
 		//0: Standby
 		//1: Running
@@ -62,9 +67,18 @@ namespace Automobin
 		//Trash Position
 		private DepthImagePoint trashDepthPoint;
 		private List<DepthImagePoint> trashDepthPoints;
+		//Time between frames
+		private bool firstFrame = true;
+		private List<long> frameTimes;
+		private Stopwatch currentStopwatch;
+		//Velocity vectors
+		private List<Velocity> velocities;
+		private List<DepthImagePoint> landingPoints;
 		//Thresholds
 		private static double LandingThreshold = 5.0;
-
+		//Gravity constant
+		private static double g = 9.794;
+		
 		public MainWindow()
 		{
 			InitializeComponent();
@@ -98,6 +112,7 @@ namespace Automobin
 				try
 				{
 					this.sensor.Start();
+					server = new Server();
 				}
 				catch(IOException)
 				{
@@ -304,26 +319,75 @@ namespace Automobin
 							FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
 							if (trashFound)
 							{
+								currentStopwatch.Start();
 								trashDepthPoints = new List<DepthImagePoint>();
 								trashDepthPoints.Add(trashDepthPoint);
+								velocities = new List<Velocity>();
+								landingPoints = new List<DepthImagePoint>();
 								state = 1;
 							}
 						}
 						else
 						{
 							//Running. Keep tracking the object, communicate with the bin, until caught by the bin.
+							currentStopwatch.Stop();
+							long time = currentStopwatch.ElapsedMilliseconds;
+							currentStopwatch.Restart();
 							UpdateTrashLocation(ref trashDepthPoint);
+							DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
+							Velocity velocity = new Velocity(lastTrashDepthPoint.X, lastTrashDepthPoint.Y, lastTrashDepthPoint.Depth, trashDepthPoint.X, trashDepthPoint.Y, trashDepthPoint.Depth, time);
 							trashDepthPoints.Add(trashDepthPoint);
-							DepthImagePoint landingPoint = PredictLandingPoint(trashDepthPoints);
+							frameTimes.Add(time);
+
+							DepthImagePoint landingPoint = PredictLandingPoint();
 							SendLocationToBin(landingPoint);
 							if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
+							{
+								currentStopwatch.Stop();
+								trashDepthPoints.Clear();
+								velocities.Clear();
+								landingPoints.Clear();
 								state = 0;
+							}
 						}
 
 					}
 				}
 		}
-		
+
+		private DepthImagePoint PredictLandingPoint()
+		{
+			DepthImagePoint landingPoint = new DepthImagePoint();
+			DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
+			Velocity lastVelocity = velocities[velocities.Count - 1];
+
+			double landingTime = ((System.Math.Sqrt(lastVelocity.getVelocityZ() * lastVelocity.getVelocityZ()) - 2 * g * lastVelocity.tail.z) - lastVelocity.getVelocityZ()) / g;
+			landingPoint.X = lastTrashDepthPoint.X + (int)(lastVelocity.getVelocityX() * landingTime);
+			landingPoint.Y = lastTrashDepthPoint.Y + (int)(lastVelocity.getVelocityY() * landingTime);
+			landingPoint.Depth = 0;
+			return landingPoint;
+		}
+
+		private void SendLocationToBin(DepthImagePoint landingPoint)
+		{
+
+
+			StringWriter stringWriter = new StringWriter();
+			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
+
+			jsonWriter.WriteStartObject();
+			jsonWriter.WritePropertyName("x");
+			jsonWriter.WriteValue(landingPoint.X);
+			jsonWriter.WritePropertyName("y");
+			jsonWriter.WriteValue(landingPoint.Y);
+			jsonWriter.WriteEndObject();
+			jsonWriter.Flush();
+
+			string message = stringWriter.GetStringBuilder().ToString();
+
+			server.setMessage(message);
+		}
+
 		private static void RenderClippedEdges(Skeleton skeleton, DrawingContext drawingContext)
 		{
 			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Bottom))

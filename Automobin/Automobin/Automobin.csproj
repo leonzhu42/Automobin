@@ -121,6 +121,7 @@
     </ApplicationDefinition>
     <Compile Include="EmguImageExtensions.cs" />
     <Compile Include="ImageExtentions.cs" />
+    <Compile Include="Server.cs" />
     <Compile Include="Vectors.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>

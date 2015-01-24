@@ -74,9 +74,57 @@ namespace Automobin
 			this.type = 1;
 		}
 
+
 		public double getNorm()
 		{
 			return Math.Sqrt((head.x - tail.x) * (head.x - tail.x) + (head.y - tail.y) * (head.y - tail.y) + (head.z - tail.z) * (head.z - tail.z));
+		}
+	}
+
+	class Velocity : SpaceVector
+	{
+		private long time = 0;
+
+		public Velocity(MCvPoint3D64f head, MCvPoint3D64f tail, long time) : base(head, tail)
+		{
+			this.time = time;
+		}
+
+		public Velocity(double headX, double headY, double headZ, double tailX, double tailY, double tailZ, long time) : base(headX, headY, headZ, tailX, tailY, tailZ)
+		{
+			this.time = time;
+		}
+
+		public double getVelocityX()
+		{
+			if(time == 0)
+				return 0;
+			else
+				return (head.x - tail.x) / time;
+		}
+
+		public double getVelocityY()
+		{
+			if (time == 0)
+				return 0;
+			else
+				return (head.y - tail.y) / time;
+		}
+
+		public double getVelocityZ()
+		{
+			if (time == 0)
+				return 0;
+			else
+				return (head.z - tail.z) / time;
+		}
+
+		public double getVelocity()
+		{
+			if (time == 0)
+				return 0;
+			else
+				return getNorm() / time;
 		}
 	}
 }
