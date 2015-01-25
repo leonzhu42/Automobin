@@ -49,7 +49,17 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>
+    </ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Coding4Fun.Kinect.WinForm">
+      <HintPath>..\..\..\..\Coding4Fun.Kinect.Toolkit\Coding4Fun.Kinect.WinForm.dll</HintPath>
+    </Reference>
+    <Reference Include="Coding4Fun.Kinect.Wpf">
+      <HintPath>..\..\..\..\Coding4Fun.Kinect.Toolkit\Coding4Fun.Kinect.Wpf.dll</HintPath>
+    </Reference>
     <Reference Include="Emgu.CV">
       <HintPath>..\..\..\..\Emgu\emgucv-windows-universal-cuda 2.9.0.1922\bin\Emgu.CV.dll</HintPath>
     </Reference>
@@ -80,6 +90,10 @@
     <Reference Include="Emgu.Util">
       <HintPath>..\..\..\..\Emgu\emgucv-windows-universal-cuda 2.9.0.1922\bin\Emgu.Util.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Expression.Drawing, Version=4.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\Coding4Fun.Kinect.Toolkit\Microsoft.Expression.Drawing.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Kinect, Version=1.7.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>C:\Program Files\Microsoft SDKs\Kinect\v1.7\Assemblies\Microsoft.Kinect.dll</HintPath>
@@ -96,9 +110,22 @@
     <Reference Include="Microsoft.Kinect.Toolkit.Interaction">
       <HintPath>C:\Program Files\Microsoft SDKs\Kinect\Developer Toolkit v1.7.0\Assemblies\Microsoft.Kinect.Toolkit.Interaction.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Speech, Version=10.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\Microsoft Speech Platform SDK\Assembly\Microsoft.Speech.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Speech.VoiceXml, Version=10.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>C:\Program Files\Microsoft Speech Platform SDK\Assembly\Microsoft.Speech.VoiceXml.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\Json60r8\Bin\Net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />

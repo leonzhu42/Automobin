@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Globalization;
@@ -16,7 +18,12 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Microsoft.Speech.AudioFormat;
+using Microsoft.Speech.Recognition;
 using Microsoft.Kinect;
+using Coding4Fun.Kinect;
+using Coding4Fun.Kinect.Wpf;
+using Coding4Fun.Kinect.Wpf.Controls;
 using Emgu.CV;
 using Emgu.Util;
 using Emgu.CV.Structure;
@@ -24,6 +31,7 @@ using Emgu.CV.Features2D;
 using Newtonsoft.Json;
 using TCPServer;
 using ImageManipulationExtensionMethods;
+
 
 namespace Automobin
 {
@@ -34,6 +42,10 @@ namespace Automobin
 	{
 		//Kinect sensor
 		private KinectSensor sensor;
+		//Speech recognition engine
+		private SpeechRecognitionEngine speechEngine;
+		//Span elements to select recognized text
+		private List<Span> recognitionSpans;
 		//Server
 		private Server server;
 		//Current state
@@ -78,10 +90,76 @@ namespace Automobin
 		private static double LandingThreshold = 5.0;
 		//Gravity constant
 		private static double g = 9.794;
-		
+		//Notify icon
+		private System.Windows.Forms.NotifyIcon notifyIcon;
+
 		public MainWindow()
 		{
 			InitializeComponent();
+			InitialTray();
+		}
+
+		private void InitialTray()
+		{
+			notifyIcon = new System.Windows.Forms.NotifyIcon();
+			notifyIcon.BalloonTipText = "Automobin";
+			notifyIcon.Text = "Automobin";
+			notifyIcon.Icon = new System.Drawing.Icon("Icon.ico");
+			notifyIcon.Visible = true;
+			notifyIcon.ShowBalloonTip(2000);
+			notifyIcon.MouseClick += new System.Windows.Forms.MouseEventHandler(notifyIcon_MouseClick);
+
+			System.Windows.Forms.MenuItem menuShow = new System.Windows.Forms.MenuItem("Show");
+			System.Windows.Forms.MenuItem menu = new System.Windows.Forms.MenuItem("Menu", new System.Windows.Forms.MenuItem[] { menuShow });
+
+			System.Windows.Forms.MenuItem menuExit = new System.Windows.Forms.MenuItem("Exit");
+			menuExit.Click += new EventHandler(exit_Click);
+
+			System.Windows.Forms.MenuItem[] children = new System.Windows.Forms.MenuItem[] { menu, menuExit };
+			notifyIcon.ContextMenu = new System.Windows.Forms.ContextMenu(children);
+
+			this.StateChanged += new EventHandler(SysTray_StateChanged);
+		}
+
+		private void SysTray_StateChanged(object sender, EventArgs e)
+		{
+			if (this.WindowState == WindowState.Minimized)
+				this.Visibility = Visibility.Hidden;
+		}
+
+		private void exit_Click(object sender, EventArgs e)
+		{
+			if(System.Windows.MessageBox.Show("Are you sure to exit?", "Yes", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
+			{
+				notifyIcon.Dispose();
+				System.Windows.Application.Current.Shutdown();
+			}
+		}
+
+		private void notifyIcon_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
+		{
+			if(e.Button == System.Windows.Forms.MouseButtons.Left)
+			{
+				if (this.Visibility == Visibility.Visible)
+					this.Visibility = Visibility.Hidden;
+				else
+				{
+					this.Visibility = Visibility.Visible;
+					this.Activate();
+				}
+			}
+		}
+
+		private static RecognizerInfo GetKinectRecognizer()
+		{
+			foreach(RecognizerInfo recognizer in SpeechRecognitionEngine.InstalledRecognizers())
+			{
+				string value;
+				recognizer.AdditionalInfo.TryGetValue("Kinect", out value);
+				if ("True".Equals(value, StringComparison.OrdinalIgnoreCase) && "en-US".Equals(recognizer.Culture.Name, StringComparison.OrdinalIgnoreCase))
+					return recognizer;
+			}
+			return null;
 		}
 
 		private void WindowLoaded(object sender, RoutedEventArgs e)
@@ -94,13 +172,14 @@ namespace Automobin
 				}
 			if(this.sensor != null)
 			{
+				/*
 				this.drawingGroup = new DrawingGroup();
 				this.skeletonImage = new DrawingImage(this.drawingGroup);
 				this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
-				this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+				//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 				this.sensor.SkeletonStream.Enable();
 				this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-				this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
+				//this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
 				//this.DepthImage.Source = this.depthColorBitmap;
 				//this.ColorImage.Source = this.colorColorBitmap;
 				this.SkeletonImage.Source = this.skeletonImage;
@@ -108,7 +187,7 @@ namespace Automobin
 				//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
 				//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
 				this.sensor.AllFramesReady += this.SensorAllFramesReady;
-
+				*/
 				try
 				{
 					this.sensor.Start();
@@ -120,14 +199,80 @@ namespace Automobin
 				}
 			}
 			if (this.sensor == null)
+			{
 				this.statusBarText.Text = Properties.Resources.NoKinectReady;
+				return;
+			}
+
+
+			RecognizerInfo recognizerInfo = GetKinectRecognizer();
+			if(recognizerInfo != null)
+			{
+				recognitionSpans = new List<Span> { startSpan };
+				this.speechEngine = new SpeechRecognitionEngine(recognizerInfo.Id);
+				
+				Choices command = new Choices();
+				command.Add(new SemanticResultValue("Okay trash", "START"));
+
+				GrammarBuilder grammarBuilder = new GrammarBuilder { Culture = recognizerInfo.Culture };
+				grammarBuilder.Append(command);
+
+				Grammar grammar = new Grammar(grammarBuilder);
+
+				//For long recognition sessions, add the following code.
+				//speechEngine.UpdateRecognizerSetting("AdaptationOn", 0);
+
+				speechEngine.SetInputToAudioStream(
+					sensor.AudioSource.Start(), new SpeechAudioFormatInfo(EncodingFormat.Pcm, 16000, 16, 1, 32000, 2, null));
+				speechEngine.RecognizeAsync(RecognizeMode.Multiple);
+			}
 		}
 
 		private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
 		{
 			if (this.sensor != null)
+			{
+				this.sensor.AudioSource.Stop();
 				this.sensor.Stop();
+				this.sensor = null;
+			}
+
+			if(this.speechEngine != null)
+			{
+				this.speechEngine.SpeechRecognized -= SpeechRecognized;
+				this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
+				this.speechEngine.RecognizeAsyncStop();
+			}
 		}
+
+		private void SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
+		{
+			const double ConfidenceThreshold = 0.3;
+
+			if(e.Result.Confidence >= ConfidenceThreshold)
+			{
+				if(e.Result.Semantics.Value.ToString() == "START")
+				{
+					//Start depth and skeleton
+					this.drawingGroup = new DrawingGroup();
+					this.skeletonImage = new DrawingImage(this.drawingGroup);
+					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
+					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+					this.sensor.SkeletonStream.Enable();
+					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
+					//this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
+					//this.DepthImage.Source = this.depthColorBitmap;
+					//this.ColorImage.Source = this.colorColorBitmap;
+					this.SkeletonImage.Source = this.skeletonImage;
+					//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
+					//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
+					//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
+					this.sensor.AllFramesReady += this.SensorAllFramesReady;
+				}
+			}
+		}
+
+		private void SpeechRejected(object sender, SpeechRecognitionRejectedEventArgs e) { }
 
 		/*
 		private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
@@ -347,6 +492,11 @@ namespace Automobin
 								trashDepthPoints.Clear();
 								velocities.Clear();
 								landingPoints.Clear();
+
+								this.sensor.DepthStream.Disable();
+								this.sensor.SkeletonStream.Disable();
+								this.SkeletonImage.Source = null;
+								this.sensor.AllFramesReady -= this.SensorAllFramesReady;
 								state = 0;
 							}
 						}
