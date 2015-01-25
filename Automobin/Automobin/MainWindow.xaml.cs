@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Globalization;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -102,15 +101,14 @@ namespace Automobin
 		private void InitialTray()
 		{
 			notifyIcon = new System.Windows.Forms.NotifyIcon();
-			notifyIcon.BalloonTipText = "Automobin";
 			notifyIcon.Text = "Automobin";
 			notifyIcon.Icon = new System.Drawing.Icon("Icon.ico");
 			notifyIcon.Visible = true;
-			notifyIcon.ShowBalloonTip(2000);
 			notifyIcon.MouseClick += new System.Windows.Forms.MouseEventHandler(notifyIcon_MouseClick);
 
 			System.Windows.Forms.MenuItem menuShow = new System.Windows.Forms.MenuItem("Show");
 			System.Windows.Forms.MenuItem menu = new System.Windows.Forms.MenuItem("Menu", new System.Windows.Forms.MenuItem[] { menuShow });
+			menu.Click += new EventHandler(menu_Click);
 
 			System.Windows.Forms.MenuItem menuExit = new System.Windows.Forms.MenuItem("Exit");
 			menuExit.Click += new EventHandler(exit_Click);
@@ -126,12 +124,32 @@ namespace Automobin
 			if (this.WindowState == WindowState.Minimized)
 				this.Visibility = Visibility.Hidden;
 		}
+		
+		private void menu_Click(object sender, EventArgs e)
+		{
+			this.Visibility = Visibility.Visible;
+		}
 
 		private void exit_Click(object sender, EventArgs e)
 		{
-			if(System.Windows.MessageBox.Show("Are you sure to exit?", "Yes", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
+			if(System.Windows.MessageBox.Show("Are you sure to exit?", "Automobin", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
 			{
 				notifyIcon.Dispose();
+
+				if (this.sensor != null)
+				{
+					this.sensor.AudioSource.Stop();
+					this.sensor.Stop();
+					this.sensor = null;
+				}
+
+				if (this.speechEngine != null)
+				{
+					this.speechEngine.SpeechRecognized -= SpeechRecognized;
+					this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
+					this.speechEngine.RecognizeAsyncStop();
+				}
+
 				System.Windows.Application.Current.Shutdown();
 			}
 		}
@@ -219,31 +237,25 @@ namespace Automobin
 
 				Grammar grammar = new Grammar(grammarBuilder);
 
+				speechEngine.LoadGrammar(grammar);
+
+				speechEngine.SpeechRecognized += SpeechRecognized;
+				speechEngine.SpeechRecognitionRejected += SpeechRejected;
+
 				//For long recognition sessions, add the following code.
 				//speechEngine.UpdateRecognizerSetting("AdaptationOn", 0);
 
+				
 				speechEngine.SetInputToAudioStream(
-					sensor.AudioSource.Start(), new SpeechAudioFormatInfo(EncodingFormat.Pcm, 16000, 16, 1, 32000, 2, null));
+					sensor.AudioSource.Start(),
+					new SpeechAudioFormatInfo(EncodingFormat.Pcm, 16000, 16, 1, 32000, 2, null));
+				
+				//speechEngine.SetInputToDefaultAudioDevice();
 				speechEngine.RecognizeAsync(RecognizeMode.Multiple);
 			}
 		}
 
-		private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e)
-		{
-			if (this.sensor != null)
-			{
-				this.sensor.AudioSource.Stop();
-				this.sensor.Stop();
-				this.sensor = null;
-			}
-
-			if(this.speechEngine != null)
-			{
-				this.speechEngine.SpeechRecognized -= SpeechRecognized;
-				this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
-				this.speechEngine.RecognizeAsyncStop();
-			}
-		}
+		private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e) { }
 
 		private void SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
 		{
@@ -461,7 +473,7 @@ namespace Automobin
 							
 							//Look for object nearby
 							bool trashFound = false;
-							FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
+							//FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
 							if (trashFound)
 							{
 								currentStopwatch.Start();
@@ -478,7 +490,7 @@ namespace Automobin
 							currentStopwatch.Stop();
 							long time = currentStopwatch.ElapsedMilliseconds;
 							currentStopwatch.Restart();
-							UpdateTrashLocation(ref trashDepthPoint);
+							//UpdateTrashLocation(ref trashDepthPoint);
 							DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
 							Velocity velocity = new Velocity(lastTrashDepthPoint.X, lastTrashDepthPoint.Y, lastTrashDepthPoint.Depth, trashDepthPoint.X, trashDepthPoint.Y, trashDepthPoint.Depth, time);
 							trashDepthPoints.Add(trashDepthPoint);

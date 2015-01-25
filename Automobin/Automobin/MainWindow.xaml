@@ -37,22 +37,21 @@
 	</Window.Resources>
 
 	<Grid>
-		<Grid.Effect>
-			<BlurEffect/>
-		</Grid.Effect>
 		<Viewbox Stretch="Uniform" HorizontalAlignment="Center">
 			<Image Name="SkeletonImage"/>
 		</Viewbox>
 		<StatusBar HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}" Height="40">
-			<StatusBarItem Padding="0 0 0 10">
-				<TextBlock Name="statusBarText" Margin="1 0 0 0">Press 'Screenshot' to save a screenshot to your 'My Pictures' directory.</TextBlock>
-			</StatusBarItem>
 			<StatusBarItem>
 				<TextBlock>
-					Say: "<Span Name="startSpan">Start</Span>"
+					Say: "<Span Name="startSpan">OK, Trash!</Span>" before you throw out the trash.
 				</TextBlock>
 			</StatusBarItem>
 			<StatusBarItem>
+				<TextBlock Name="statusBarText">
+					'Screenshot' saves a screenshot to 'My Pictures' directory.
+				</TextBlock>
+			</StatusBarItem>
+			<StatusBarItem HorizontalAlignment="Right">
 				<Button Style="{StaticResource SnapshotButton}" Content="Screenshot" Height="35" HorizontalAlignment="Right"  VerticalAlignment="Bottom" Name="buttonScreenshot"  Click="ButtonScreenshotClick" Width="120" />
 			</StatusBarItem>
 		</StatusBar>
