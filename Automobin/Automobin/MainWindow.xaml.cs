@@ -39,25 +39,25 @@ namespace Automobin
 	/// </summary>
 	public partial class MainWindow : Window
 	{
-		//Kinect sensor
+		// Kinect sensor
 		private KinectSensor sensor;
-		//Speech recognition engine
+		// Speech recognition engine
 		private SpeechRecognitionEngine speechEngine;
-		//Span elements to select recognized text
+		// Span elements to select recognized text
 		private List<Span> recognitionSpans;
-		//Server
+		// Server
 		private Server server;
-		//Current state
-		//0: Standby
-		//1: Running
+		// Current state
+		// 0: Standby
+		// 1: Running
 		private int state = 0;
-		//Depth images
+		// Depth images
 		private DepthImagePixel[] depthPixels;
 		private WriteableBitmap depthColorBitmap;
 		private byte[] depthColorPixels;
 		private int frameWidth;
 		private int frameHeight;
-		//Skeleton image
+		// Skeleton image
 		private const float RenderWidth = 640.0f;
 		private const float RenderHeight = 480.0f;
 		private const double JointThickness = 3;
@@ -70,26 +70,26 @@ namespace Automobin
 		private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
 		private DrawingGroup drawingGroup;
 		private DrawingImage skeletonImage;
-		//Hand Positions
+		// Hand Positions
 		private DepthImagePoint rightHandDepthPoint;
 		private SkeletonPoint rightHandSkeletonPoint;
 		private DepthImagePoint leftHandDepthPoint;
 		private SkeletonPoint leftHandSkeletonPoint;
-		//Trash Position
+		// Trash Position
 		private DepthImagePoint trashDepthPoint;
 		private List<DepthImagePoint> trashDepthPoints;
-		//Time between frames
+		// Time between frames
 		private bool firstFrame = true;
 		private List<long> frameTimes;
 		private Stopwatch currentStopwatch;
-		//Velocity vectors
+		// Velocity vectors
 		private List<Velocity> velocities;
 		private List<DepthImagePoint> landingPoints;
-		//Thresholds
+		// Thresholds
 		private static double LandingThreshold = 5.0;
-		//Gravity constant
+		// Gravity constant
 		private static double g = 9.794;
-		//Notify icon
+		// Notify icon
 		private System.Windows.Forms.NotifyIcon notifyIcon;
 
 		public MainWindow()
@@ -242,7 +242,7 @@ namespace Automobin
 				speechEngine.SpeechRecognized += SpeechRecognized;
 				speechEngine.SpeechRecognitionRejected += SpeechRejected;
 
-				//For long recognition sessions, add the following code.
+				// For long recognition sessions, add the following code.
 				//speechEngine.UpdateRecognizerSetting("AdaptationOn", 0);
 
 				
@@ -265,7 +265,7 @@ namespace Automobin
 			{
 				if(e.Result.Semantics.Value.ToString() == "START")
 				{
-					//Start depth and skeleton
+					// Start depth and skeleton
 					this.drawingGroup = new DrawingGroup();
 					this.skeletonImage = new DrawingImage(this.drawingGroup);
 					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
@@ -409,112 +409,137 @@ namespace Automobin
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
+			// Get the skeleton frame
 			Skeleton[] skeletons = new Skeleton[0];
 
-
-				using(DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+			using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+			{
+				if (depthFrame != null)
 				{
-					if(depthFrame != null)
+					frameWidth = depthFrame.Width;
+					frameHeight = depthFrame.Height;
+					// Get the skeletons
+					using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
 					{
-						frameWidth = depthFrame.Width;
-						frameHeight = depthFrame.Height;
-						//Get the skeletons
-						using(SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
+						if (skeletonFrame != null)
 						{
-							if(skeletonFrame != null)
-							{
-								skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
-								skeletonFrame.CopySkeletonDataTo(skeletons);
-							}
+							skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
+							skeletonFrame.CopySkeletonDataTo(skeletons);
 						}
-
-						//Draw the skeletons
-						using(DrawingContext dc = this.drawingGroup.Open())
-						{
-							dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-
-							if(skeletons.Length != 0)
-							{
-								foreach (Skeleton skel in skeletons)
-								{
-									RenderClippedEdges(skel, dc);
-									if (skel.TrackingState == SkeletonTrackingState.Tracked)
-										this.DrawBonesAndJoints(skel, dc);
-									else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
-										dc.DrawEllipse(
-											this.centerPointBrush,
-											null,
-											this.SkeletonPointToScreen(skel.Position),
-											BodyCenterThickness,
-											BodyCenterThickness);
-								}
-							}
-							this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-						}
-
-						//Check the state
-						if(state == 0)
-						{
-							//Standby. Check whether any object nearby is at approximately the same depth as user's hand.
-							//Choose the skeleton to track
-							Skeleton skeleton = (from s in skeletons
-												 where s.TrackingState == SkeletonTrackingState.Tracked
-												 select s).FirstOrDefault();
-							//Right hand
-							Joint rightHand = skeleton.Joints[JointType.HandRight];
-							rightHandSkeletonPoint = rightHand.Position;
-							rightHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(rightHandSkeletonPoint, sensor.DepthStream.Format);
-							//Left hand
-							Joint leftHand = skeleton.Joints[JointType.HandLeft];
-							leftHandSkeletonPoint = leftHand.Position;
-							leftHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(leftHandSkeletonPoint, sensor.DepthStream.Format);
-
-							DepthImagePoint[] handDepthPoints = { rightHandDepthPoint, leftHandDepthPoint };
-							
-							//Look for object nearby
-							bool trashFound = false;
-							//FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
-							if (trashFound)
-							{
-								currentStopwatch.Start();
-								trashDepthPoints = new List<DepthImagePoint>();
-								trashDepthPoints.Add(trashDepthPoint);
-								velocities = new List<Velocity>();
-								landingPoints = new List<DepthImagePoint>();
-								state = 1;
-							}
-						}
-						else
-						{
-							//Running. Keep tracking the object, communicate with the bin, until caught by the bin.
-							currentStopwatch.Stop();
-							long time = currentStopwatch.ElapsedMilliseconds;
-							currentStopwatch.Restart();
-							//UpdateTrashLocation(ref trashDepthPoint);
-							DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
-							Velocity velocity = new Velocity(lastTrashDepthPoint.X, lastTrashDepthPoint.Y, lastTrashDepthPoint.Depth, trashDepthPoint.X, trashDepthPoint.Y, trashDepthPoint.Depth, time);
-							trashDepthPoints.Add(trashDepthPoint);
-							frameTimes.Add(time);
-
-							DepthImagePoint landingPoint = PredictLandingPoint();
-							SendLocationToBin(landingPoint);
-							if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
-							{
-								currentStopwatch.Stop();
-								trashDepthPoints.Clear();
-								velocities.Clear();
-								landingPoints.Clear();
-
-								this.sensor.DepthStream.Disable();
-								this.sensor.SkeletonStream.Disable();
-								this.SkeletonImage.Source = null;
-								this.sensor.AllFramesReady -= this.SensorAllFramesReady;
-								state = 0;
-							}
-						}
-
 					}
 				}
+				else
+					return;
+			}
+
+			// Draw the skeletons
+			using (DrawingContext dc = this.drawingGroup.Open())
+			{
+				dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+				if (skeletons.Length != 0)
+				{
+					foreach (Skeleton skel in skeletons)
+					{
+						RenderClippedEdges(skel, dc);
+						if (skel.TrackingState == SkeletonTrackingState.Tracked)
+							this.DrawBonesAndJoints(skel, dc);
+						else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
+							dc.DrawEllipse(
+								this.centerPointBrush,
+								null,
+								this.SkeletonPointToScreen(skel.Position),
+									BodyCenterThickness,
+									BodyCenterThickness);
+					}
+				}
+				this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
+			}
+
+			// Get the depth
+			using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+			{
+				if (depthFrame != null)
+				{
+					// Copy the pixel data from the image to a temporary array
+					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
+				}
+				else
+					return;
+			}
+
+			// Check the state
+			if (state == 0)
+			{
+				// Standby. Check whether any object nearby is at approximately the same depth as user's hand.
+				// Choose the skeleton to track
+				Skeleton skeleton = (from s in skeletons
+									 where s.TrackingState == SkeletonTrackingState.Tracked
+									 select s).FirstOrDefault();
+				// Right hand
+				Joint rightHand = skeleton.Joints[JointType.HandRight];
+				rightHandSkeletonPoint = rightHand.Position;
+				rightHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(rightHandSkeletonPoint, sensor.DepthStream.Format);
+				// Left hand
+				Joint leftHand = skeleton.Joints[JointType.HandLeft];
+				leftHandSkeletonPoint = leftHand.Position;
+				leftHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(leftHandSkeletonPoint, sensor.DepthStream.Format);
+
+				DepthImagePoint[] handDepthPoints = { rightHandDepthPoint, leftHandDepthPoint };
+
+				// Look for object nearby
+				bool trashFound = false;
+				FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
+				if (trashFound)
+				{
+					currentStopwatch.Start();
+					trashDepthPoints = new List<DepthImagePoint>();
+					trashDepthPoints.Add(trashDepthPoint);
+					velocities = new List<Velocity>();
+					landingPoints = new List<DepthImagePoint>();
+					state = 1;
+				}
+			}
+			else
+			{
+				// Running. Keep tracking the object, communicate with the bin, until caught by the bin.
+				currentStopwatch.Stop();
+				long time = currentStopwatch.ElapsedMilliseconds;
+				currentStopwatch.Restart();
+				UpdateTrashLocation(ref trashDepthPoint);
+				DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
+				Velocity velocity = new Velocity(lastTrashDepthPoint.X, lastTrashDepthPoint.Y, lastTrashDepthPoint.Depth, trashDepthPoint.X, trashDepthPoint.Y, trashDepthPoint.Depth, time);
+				trashDepthPoints.Add(trashDepthPoint);
+				frameTimes.Add(time);
+
+				DepthImagePoint landingPoint = PredictLandingPoint();
+				SendLocationToBin(landingPoint);
+				if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
+				{
+					currentStopwatch.Stop();
+					trashDepthPoints.Clear();
+					velocities.Clear();
+					landingPoints.Clear();
+
+					this.sensor.DepthStream.Disable();
+					this.sensor.SkeletonStream.Disable();
+					this.SkeletonImage.Source = null;
+					this.sensor.AllFramesReady -= this.SensorAllFramesReady;
+					state = 0;
+				}
+			}
+		}
+
+		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
+		{
+
+		}
+
+		private void FindNearbyObject(DepthImagePoint[] handPoints, ref DepthImagePoint trashPoint, ref bool trashFound)
+		{
+			foreach(DepthImagePoint handPoint in handPoints)
+			{
+				
+			}
 		}
 
 		private DepthImagePoint PredictLandingPoint()
@@ -527,13 +552,26 @@ namespace Automobin
 			landingPoint.X = lastTrashDepthPoint.X + (int)(lastVelocity.getVelocityX() * landingTime);
 			landingPoint.Y = lastTrashDepthPoint.Y + (int)(lastVelocity.getVelocityY() * landingTime);
 			landingPoint.Depth = 0;
-			return landingPoint;
+			landingPoints.Add(landingPoint);
+
+			DepthImagePoint prediction = new DepthImagePoint();
+			long sumX = 0;
+			long sumY = 0;
+			long sumDepth = 0;
+			foreach(DepthImagePoint point in landingPoints)
+			{
+				sumX += point.X;
+				sumY += point.Y;
+				sumDepth += point.Depth;
+			}
+			prediction.X = (int)sumX / landingPoints.Count;
+			prediction.Y = (int)sumY / landingPoints.Count;
+			prediction.Depth = (int)sumDepth / landingPoints.Count;
+			return prediction;
 		}
 
 		private void SendLocationToBin(DepthImagePoint landingPoint)
 		{
-
-
 			StringWriter stringWriter = new StringWriter();
 			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
 
