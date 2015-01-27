@@ -30,6 +30,14 @@ namespace ImageManipulationExtensionMethods
 			return new Image<TColor, TDepth>(bitmap);
 		}
 
+		public static Image<TColor, TDepth> ToOpenCVImage<TColor, TDepth>(this DepthImageFrame image)
+			where TColor : struct, IColor
+			where TDepth : new()
+		{
+			var bitmap = image.ToBitmap();
+			return new Image<TColor, TDepth>(bitmap);
+		}
+
 		public static System.Windows.Media.Imaging.BitmapSource ToBitmapSource(this IImage image)
 		{
 			var source = image.Bitmap.ToBitmapSource();

@@ -57,6 +57,11 @@ namespace Automobin
 		private byte[] depthColorPixels;
 		private int frameWidth;
 		private int frameHeight;
+		private int bytesPerPixel;
+		private Image<Gray, Int32> frameImage;
+		//Local image
+		private int localWidth = 50;
+		private int localHeight = 50;
 		// Skeleton image
 		private const float RenderWidth = 640.0f;
 		private const float RenderHeight = 480.0f;
@@ -87,6 +92,8 @@ namespace Automobin
 		private List<DepthImagePoint> landingPoints;
 		// Thresholds
 		private static double LandingThreshold = 5.0;
+		private static double ObjectThreshold = 10.0;
+		private static double BackgroundColor = 255;
 		// Gravity constant
 		private static double g = 9.794;
 		// Notify icon
@@ -412,21 +419,13 @@ namespace Automobin
 			// Get the skeleton frame
 			Skeleton[] skeletons = new Skeleton[0];
 
-			using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
+			// Get the skeletons
+			using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
 			{
-				if (depthFrame != null)
+				if (skeletonFrame != null)
 				{
-					frameWidth = depthFrame.Width;
-					frameHeight = depthFrame.Height;
-					// Get the skeletons
-					using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
-					{
-						if (skeletonFrame != null)
-						{
-							skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
-							skeletonFrame.CopySkeletonDataTo(skeletons);
-						}
-					}
+					skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
+					skeletonFrame.CopySkeletonDataTo(skeletons);
 				}
 				else
 					return;
@@ -460,6 +459,11 @@ namespace Automobin
 			{
 				if (depthFrame != null)
 				{
+					frameWidth = depthFrame.Width;
+					frameHeight = depthFrame.Height;
+					bytesPerPixel = depthFrame.BytesPerPixel;
+					// Convert the image to a Emgu image
+					frameImage = depthFrame.ToOpenCVImage<Gray, Int32>();
 					// Copy the pixel data from the image to a temporary array
 					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
 				}
@@ -531,7 +535,59 @@ namespace Automobin
 
 		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
 		{
+			int stride = frameWidth * bytesPerPixel;
+			DepthImagePixel trashPixel = depthPixels[trashPoint.X * bytesPerPixel + trashPoint.Y * stride];
+			byte[,] localData = new byte[localWidth, localHeight];
+			
+			int left = trashPoint.X - localWidth / 2;
+			int down = trashPoint.Y - localHeight / 2;
 
+			Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
+			CvInvoke.cvGetSubRect(frameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+
+			Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
+
+			CvInvoke.cvThreshold(localImage, processedLocalImage, ObjectThreshold, BackgroundColor, Emgu.CV.CvEnum.THRESH.CV_THRESH_BINARY);
+
+			int midX = 0;
+			int midY = 0;
+			System.Drawing.Bitmap processedBitmap = processedLocalImage.ToBitmap();
+			System.Drawing.Color white = System.Drawing.Color.White;
+
+			// Count the total white pixel number.
+			int whitePixel = 0;
+			for(int i = 0; i < processedBitmap.Width; ++i)
+				for(int j = 0; j < processedBitmap.Height; ++j)
+					if(processedBitmap.GetPixel(i, j).Equals(white))
+						whitePixel++;
+
+			int tempWhitePixel;
+
+			// Find midX
+			tempWhitePixel = 0;
+			for (midX = 0; midX < processedBitmap.Width; ++midX)
+			{
+				for (int j = 0; j < processedBitmap.Height; ++j)
+					if (processedBitmap.GetPixel(midX, j).Equals(white))
+						tempWhitePixel++;
+				if (tempWhitePixel > whitePixel / 2)
+					break;
+			}
+			
+			// Find midY
+			tempWhitePixel = 0;
+			for (int i = 0; i < processedBitmap.Width; ++i)
+			{
+				for (midY = 0; midY < processedBitmap.Height; ++midY)
+					if (processedBitmap.GetPixel(i, midY).Equals(white))
+						tempWhitePixel++;
+				if (tempWhitePixel > whitePixel)
+					break;
+			}
+
+			trashPoint.X = midX;
+			trashPoint.Y = midY;
+			trashPoint.Depth = depthPixels[midX * bytesPerPixel + midY * stride].Depth;
 		}
 
 		private void FindNearbyObject(DepthImagePoint[] handPoints, ref DepthImagePoint trashPoint, ref bool trashFound)
