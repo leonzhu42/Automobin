@@ -535,9 +535,8 @@ namespace Automobin
 
 		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
 		{
+			// Get the binarilized local image.
 			int stride = frameWidth * bytesPerPixel;
-			DepthImagePixel trashPixel = depthPixels[trashPoint.X * bytesPerPixel + trashPoint.Y * stride];
-			byte[,] localData = new byte[localWidth, localHeight];
 			
 			int left = trashPoint.X - localWidth / 2;
 			int down = trashPoint.Y - localHeight / 2;
@@ -551,24 +550,23 @@ namespace Automobin
 
 			int midX = 0;
 			int midY = 0;
-			System.Drawing.Bitmap processedBitmap = processedLocalImage.ToBitmap();
-			System.Drawing.Color white = System.Drawing.Color.White;
+			Gray white = new Gray(0);
 
 			// Count the total white pixel number.
 			int whitePixel = 0;
-			for(int i = 0; i < processedBitmap.Width; ++i)
-				for(int j = 0; j < processedBitmap.Height; ++j)
-					if(processedBitmap.GetPixel(i, j).Equals(white))
+			for (int i = 0; i < processedLocalImage.Width; ++i)
+				for (int j = 0; j < processedLocalImage.Height; ++j)
+					if (Gray.Equals(processedLocalImage[i, j], white))
 						whitePixel++;
 
 			int tempWhitePixel;
 
 			// Find midX
 			tempWhitePixel = 0;
-			for (midX = 0; midX < processedBitmap.Width; ++midX)
+			for (midX = 0; midX < processedLocalImage.Width; ++midX)
 			{
-				for (int j = 0; j < processedBitmap.Height; ++j)
-					if (processedBitmap.GetPixel(midX, j).Equals(white))
+				for (int j = 0; j < processedLocalImage.Height; ++j)
+					if (Gray.Equals(processedLocalImage[midX, j], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel / 2)
 					break;
@@ -576,10 +574,10 @@ namespace Automobin
 			
 			// Find midY
 			tempWhitePixel = 0;
-			for (int i = 0; i < processedBitmap.Width; ++i)
+			for (int i = 0; i < processedLocalImage.Width; ++i)
 			{
-				for (midY = 0; midY < processedBitmap.Height; ++midY)
-					if (processedBitmap.GetPixel(i, midY).Equals(white))
+				for (midY = 0; midY < processedLocalImage.Height; ++midY)
+					if (Gray.Equals(processedLocalImage[i, midY], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel)
 					break;
@@ -592,10 +590,80 @@ namespace Automobin
 
 		private void FindNearbyObject(DepthImagePoint[] handPoints, ref DepthImagePoint trashPoint, ref bool trashFound)
 		{
-			foreach(DepthImagePoint handPoint in handPoints)
+			foreach (DepthImagePoint handPoint in handPoints)
 			{
-				
+				// Get the binarilized local image.
+				int stride = frameWidth * bytesPerPixel;
+
+				int left = trashPoint.X - localWidth / 2;
+				int down = trashPoint.Y - localHeight / 2;
+
+				Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
+				CvInvoke.cvGetSubRect(frameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+
+				Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
+
+				CvInvoke.cvThreshold(localImage, processedLocalImage, ObjectThreshold, BackgroundColor, Emgu.CV.CvEnum.THRESH.CV_THRESH_BINARY);
+
+				// Now both hand and trash are white.
+				// Floodfill hand into black.
+
+				MCvScalar black = new MCvScalar(255);
+				MCvScalar objectThresholdScalar = new MCvScalar(ObjectThreshold);
+				MCvConnectedComp comp = new MCvConnectedComp();
+
+				for (int i = 0; i < processedLocalImage.Width; ++i)
+					for (int j = 0; j < processedLocalImage.Height; ++j)
+						if (depthPixels[i * stride + j * bytesPerPixel].PlayerIndex != 0)
+							CvInvoke.cvFloodFill(processedLocalImage.Ptr, new System.Drawing.Point(i, j), black, objectThresholdScalar, objectThresholdScalar, out comp, 8, IntPtr.Zero);
+
+				int midX = 0;
+				int midY = 0;
+				Gray white = new Gray(0);
+
+				// Count the total white pixel number.
+				int whitePixel = 0;
+				for (int i = 0; i < processedLocalImage.Width; ++i)
+					for (int j = 0; j < processedLocalImage.Height; ++j)
+						if (Gray.Equals(processedLocalImage[i, j], white))
+						{
+							whitePixel++;
+							trashFound = true;
+						}
+
+				int tempWhitePixel;
+
+				// Find midX
+				tempWhitePixel = 0;
+				for (midX = 0; midX < processedLocalImage.Width; ++midX)
+				{
+					for (int j = 0; j < processedLocalImage.Height; ++j)
+						if (Gray.Equals(processedLocalImage[midX, j], white))
+							tempWhitePixel++;
+					if (tempWhitePixel > whitePixel / 2)
+						break;
+				}
+
+				// Find midY
+				tempWhitePixel = 0;
+				for (int i = 0; i < processedLocalImage.Width; ++i)
+				{
+					for (midY = 0; midY < processedLocalImage.Height; ++midY)
+						if (Gray.Equals(processedLocalImage[i, midY], white))
+							tempWhitePixel++;
+					if (tempWhitePixel > whitePixel)
+						break;
+				}
+
+				if (trashFound)
+				{
+					trashPoint.X = midX;
+					trashPoint.Y = midY;
+					trashPoint.Depth = depthPixels[midX * bytesPerPixel + midY * stride].Depth;
+					return;
+				}
 			}
+			trashFound = false;
 		}
 
 		private DepthImagePoint PredictLandingPoint()
