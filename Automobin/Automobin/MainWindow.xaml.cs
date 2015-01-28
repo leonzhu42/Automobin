@@ -53,8 +53,8 @@ namespace Automobin
 		private int state = 0;
 		// Depth images
 		private DepthImagePixel[] depthPixels;
-		private WriteableBitmap depthColorBitmap;
-		private byte[] depthColorPixels;
+		//private WriteableBitmap depthColorBitmap;
+		//private byte[] depthColorPixels;
 		private int frameWidth;
 		private int frameHeight;
 		private int bytesPerPixel;
@@ -84,7 +84,7 @@ namespace Automobin
 		private DepthImagePoint trashDepthPoint;
 		private List<DepthImagePoint> trashDepthPoints;
 		// Time between frames
-		private bool firstFrame = true;
+		//private bool firstFrame = true;
 		private List<long> frameTimes;
 		private Stopwatch currentStopwatch;
 		// Velocity vectors
@@ -113,14 +113,13 @@ namespace Automobin
 			notifyIcon.Visible = true;
 			notifyIcon.MouseClick += new System.Windows.Forms.MouseEventHandler(notifyIcon_MouseClick);
 
-			System.Windows.Forms.MenuItem menuShow = new System.Windows.Forms.MenuItem("Show");
-			System.Windows.Forms.MenuItem menu = new System.Windows.Forms.MenuItem("Menu", new System.Windows.Forms.MenuItem[] { menuShow });
-			menu.Click += new EventHandler(menu_Click);
+			System.Windows.Forms.MenuItem menuAbout = new System.Windows.Forms.MenuItem("About");
+			menuAbout.Click += new EventHandler(about_Click);
 
 			System.Windows.Forms.MenuItem menuExit = new System.Windows.Forms.MenuItem("Exit");
 			menuExit.Click += new EventHandler(exit_Click);
 
-			System.Windows.Forms.MenuItem[] children = new System.Windows.Forms.MenuItem[] { menu, menuExit };
+			System.Windows.Forms.MenuItem[] children = new System.Windows.Forms.MenuItem[] { menuAbout, menuExit };
 			notifyIcon.ContextMenu = new System.Windows.Forms.ContextMenu(children);
 
 			this.StateChanged += new EventHandler(SysTray_StateChanged);
@@ -131,34 +130,32 @@ namespace Automobin
 			if (this.WindowState == WindowState.Minimized)
 				this.Visibility = Visibility.Hidden;
 		}
-		
-		private void menu_Click(object sender, EventArgs e)
+
+		private void about_Click(object sender, EventArgs e)
 		{
-			this.Visibility = Visibility.Visible;
+			MessageBox.Show("Automobin - A project by LGW and ZZY." + Environment.NewLine + "Some images in the project are works from DryIcons, http://dryicons.com.", "Automobin", MessageBoxButton.OK, MessageBoxImage.Information);
 		}
 
 		private void exit_Click(object sender, EventArgs e)
 		{
-			if(System.Windows.MessageBox.Show("Are you sure to exit?", "Automobin", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
+			notifyIcon.Dispose();
+
+			if (this.sensor != null)
 			{
-				notifyIcon.Dispose();
-
-				if (this.sensor != null)
-				{
-					this.sensor.AudioSource.Stop();
-					this.sensor.Stop();
-					this.sensor = null;
-				}
-
-				if (this.speechEngine != null)
-				{
-					this.speechEngine.SpeechRecognized -= SpeechRecognized;
-					this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
-					this.speechEngine.RecognizeAsyncStop();
-				}
-
-				System.Windows.Application.Current.Shutdown();
+				this.sensor.AudioSource.Stop();
+				this.sensor.Stop();
+				this.sensor = null;
 			}
+
+			if (this.speechEngine != null)
+			{
+				this.speechEngine.SpeechRecognized -= SpeechRecognized;
+				this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
+				this.speechEngine.RecognizeAsyncStop();
+			}
+
+			notifyIcon.Dispose();
+			System.Windows.Application.Current.Shutdown();
 		}
 
 		private void notifyIcon_MouseClick(object sender, System.Windows.Forms.MouseEventArgs e)
@@ -263,6 +260,11 @@ namespace Automobin
 		}
 
 		private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e) { }
+
+		private void DragWindow(object sender, MouseButtonEventArgs e)
+		{
+			this.DragMove();
+		}
 
 		private void SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
 		{
@@ -495,11 +497,13 @@ namespace Automobin
 				FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
 				if (trashFound)
 				{
+					currentStopwatch = new Stopwatch();
 					currentStopwatch.Start();
 					trashDepthPoints = new List<DepthImagePoint>();
 					trashDepthPoints.Add(trashDepthPoint);
 					velocities = new List<Velocity>();
 					landingPoints = new List<DepthImagePoint>();
+					frameTimes = new List<long>();
 					state = 1;
 				}
 			}
@@ -834,6 +838,7 @@ namespace Automobin
 			drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
 		}
 
+		/*
 		private void ButtonScreenshotClick(object sender, RoutedEventArgs e)
 		{
 			//Save depth image
@@ -863,5 +868,6 @@ namespace Automobin
 				}
 			}
 		}
+		*/
 	}
 }
