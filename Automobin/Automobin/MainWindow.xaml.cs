@@ -31,7 +31,6 @@ using Newtonsoft.Json;
 using TCPServer;
 using ImageManipulationExtensionMethods;
 
-
 namespace Automobin
 {
 	/// <summary>
@@ -133,7 +132,7 @@ namespace Automobin
 
 		private void about_Click(object sender, EventArgs e)
 		{
-			MessageBox.Show("Automobin - A project by LGW and ZZY." + Environment.NewLine + "Some images in the project are works from DryIcons, http://dryicons.com.", "Automobin", MessageBoxButton.OK, MessageBoxImage.Information);
+			MessageBox.Show("Automobin - A project by LGW and ZZY." + Environment.NewLine + "Helps you throw trash easier.", "Automobin", MessageBoxButton.OK, MessageBoxImage.Information);
 		}
 
 		private void exit_Click(object sender, EventArgs e)
@@ -276,7 +275,7 @@ namespace Automobin
 				{
 					// Start depth and skeleton
 					this.drawingGroup = new DrawingGroup();
-					this.skeletonImage = new DrawingImage(this.drawingGroup);
+					//this.skeletonImage = new DrawingImage(this.drawingGroup);
 					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
 					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
@@ -284,7 +283,7 @@ namespace Automobin
 					//this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
 					//this.DepthImage.Source = this.depthColorBitmap;
 					//this.ColorImage.Source = this.colorColorBitmap;
-					this.SkeletonImage.Source = this.skeletonImage;
+					//this.SkeletonImage.Source = this.skeletonImage;
 					//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
 					//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
 					//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
@@ -294,127 +293,6 @@ namespace Automobin
 		}
 
 		private void SpeechRejected(object sender, SpeechRecognitionRejectedEventArgs e) { }
-
-		/*
-		private void SensorColorFrameReady(object sender, ColorImageFrameReadyEventArgs e)
-		{
-			BitmapSource colorBitmap;
-			bool firstRun = true;
-			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
-			{
-				if(colorFrame != null)
-				{
-					colorFrame.CopyPixelDataTo(this.colorColorPixels);
-					this.colorColorBitmap.WritePixels(
-						new Int32Rect(0, 0, this.colorColorBitmap.PixelWidth, this.colorColorBitmap.PixelHeight),
-						this.colorColorPixels,
-						this.colorColorBitmap.PixelWidth * sizeof(int),
-						0);
-					
-					//Convert frame into OpenCV image
-					colorBitmap = colorFrame.SliceColorImage();
-					currImage = new Image<Bgr, Byte>(colorBitmap.ToBitmap());
-					
-					//Lucas Kanade
-
-					
-				}
-			}
-		}
-
-		private void SensorDepthFrameReady(object sender, DepthImageFrameReadyEventArgs e)
-		{
-			using (DepthImageFrame depthFrame = e.OpenDepthImageFrame())
-			{
-				if (depthFrame != null)
-				{
-					// Copy the pixel data from the image to a temporary array
-					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
-
-					// Get the min and max reliable depth for the current frame
-					int minDepth = depthFrame.MinDepth;
-					int maxDepth = depthFrame.MaxDepth;
-
-					// Convert the depth to RGB
-					int colorPixelIndex = 0;
-					for (int i = 0; i < this.depthPixels.Length; ++i)
-					{
-						// Get the depth for this pixel
-						short depth = depthPixels[i].Depth;
-
-						// To convert to a byte, we're discarding the most-significant
-						// rather than least-significant bits.
-						// We're preserving detail, although the intensity will "wrap."
-						// Values outside the reliable depth range are mapped to 0 (black).
-
-						// Note: Using conditionals in this loop could degrade performance.
-						// Consider using a lookup table instead when writing production code.
-						// See the KinectDepthViewer class used by the KinectExplorer sample
-						// for a lookup table example.
-						byte intensity = (byte)(depth >= minDepth && depth <= maxDepth ? depth : 0);
-
-						// Write out blue byte
-						this.depthColorPixels[colorPixelIndex++] = intensity;
-
-						// Write out green byte
-						this.depthColorPixels[colorPixelIndex++] = intensity;
-
-						// Write out red byte                        
-						this.depthColorPixels[colorPixelIndex++] = intensity;
-
-						// We're outputting BGR, the last byte in the 32 bits is unused so skip it
-						// If we were outputting BGRA, we would write alpha here.
-						++colorPixelIndex;
-					}
-
-					// Write the pixel data into our bitmap
-					this.depthColorBitmap.WritePixels(
-						new Int32Rect(0, 0, this.depthColorBitmap.PixelWidth, this.depthColorBitmap.PixelHeight),
-						this.depthColorPixels,
-						this.depthColorBitmap.PixelWidth * sizeof(int),
-						0);
-				}
-			}
-		}
-
-		
-		private void SensorSkeletonFrameReady(object sender, SkeletonFrameReadyEventArgs e)
-		{
-			Skeleton[] skeletons = new Skeleton[0];
-
-			using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
-			{
-				if(skeletonFrame != null)
-				{
-					skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
-					skeletonFrame.CopySkeletonDataTo(skeletons);
-				}
-			}
-
-			using(DrawingContext dc = this.drawingGroup.Open())
-			{
-				dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-
-				if(skeletons.Length != 0)
-				{
-					foreach (Skeleton skel in skeletons)
-					{
-						RenderClippedEdges(skel, dc);
-						if (skel.TrackingState == SkeletonTrackingState.Tracked)
-							this.DrawBonesAndJoints(skel, dc);
-						else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
-							dc.DrawEllipse(
-								this.centerPointBrush,
-								null,
-								this.SkeletonPointToScreen(skel.Position),
-								BodyCenterThickness,
-								BodyCenterThickness);
-					}
-				}
-				this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-			}
-		}
-		*/
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
@@ -530,7 +408,7 @@ namespace Automobin
 
 					this.sensor.DepthStream.Disable();
 					this.sensor.SkeletonStream.Disable();
-					this.SkeletonImage.Source = null;
+					//this.SkeletonImage.Source = null;
 					this.sensor.AllFramesReady -= this.SensorAllFramesReady;
 					state = 0;
 				}
@@ -838,36 +716,21 @@ namespace Automobin
 			drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
 		}
 
-		/*
-		private void ButtonScreenshotClick(object sender, RoutedEventArgs e)
-		{
-			//Save depth image
-			{
-				if (this.sensor == null)
-				{
-					this.statusBarText.Text = Properties.Resources.ConnectDeviceFirst;
-					return;
-				}
-				BitmapEncoder encoder = new PngBitmapEncoder();
-				encoder.Frames.Add(BitmapFrame.Create(this.depthColorBitmap));
-				string time = System.DateTime.Now.ToString("hh'-'mm'-'ss", CultureInfo.CurrentCulture.DateTimeFormat);
-				string myPhotos = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-				string path = System.IO.Path.Combine(myPhotos, "Depth " + time + ".png");
+		private bool AltDown = false;
 
-				try
-				{
-					using (FileStream fs = new FileStream(path, FileMode.Create))
-					{
-						encoder.Save(fs);
-					}
-					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteSuccess, path);
-				}
-				catch (IOException)
-				{
-					this.statusBarText.Text = string.Format("{0} {1}", Properties.Resources.ScreenshotWriteFailed, path);
-				}
-			}
+		private void Window_KeyDown(object sender, KeyEventArgs e)
+		{
+			if (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)
+				AltDown = true;
+			else if (e.SystemKey == Key.F4 && AltDown)
+				e.Handled = true;
 		}
-		*/
+
+		private void Window_KeyUp(object sender, KeyEventArgs e)
+		{
+			if (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)
+				AltDown = false;
+		}
+
 	}
 }
