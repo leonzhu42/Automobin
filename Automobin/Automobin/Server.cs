@@ -2,33 +2,89 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Threading;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace TCPServer
+namespace Automobin
 {
 	class Server
 	{
+		private IPAddress ipAddress;
 		private TcpListener tcpListener;
 		private Thread listenThread;
+		private Socket socket;
+		
 		private string messageToSend;
 		private bool messageToSendFlag = false;
 		private string messageReceived;
 		private bool messageReceivedFlag = false;
 
+		private ASCIIEncoding encoder;
+
 		public Server()
 		{
-			this.tcpListener = new TcpListener(IPAddress.Any, 3000);
-			this.listenThread = new Thread(new ThreadStart(ListenForClients));
-			this.listenThread.Start();
+			encoder = new ASCIIEncoding();
+			this.ipAddress = IPAddress.Parse("192.168.1.1");
+			this.tcpListener = new TcpListener(ipAddress, 8234);
+			this.listenThread = new Thread(new ThreadStart(ListenForClient));
 		}
 
-		public void setMessage(string message)
+		private void ListenForClient()
 		{
-			this.messageToSend = message;
-			messageToSendFlag = true;
+			this.tcpListener.Start();
+			socket = tcpListener.AcceptSocket();
+			Thread socketThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
+			socketThread.Start(socket);
+		}
+
+		private void HandleClientComm(object tcpSocket)
+		{
+			Socket socket = (Socket)tcpSocket;
+			byte[] message = new byte[4096];
+			int bytesRead;
+
+			while(true)
+			{
+				bytesRead = 0;
+				try
+				{
+					bytesRead = socket.Receive(message);
+				}
+				catch
+				{
+					continue;
+				}
+				if(bytesRead != 0)
+				{
+					messageReceivedFlag = true;
+					messageReceived = encoder.GetString(message, 0, bytesRead);
+				}
+				if(messageToSendFlag)
+				{
+					byte[] buffer = encoder.GetBytes(messageToSend);
+					socket.Send(buffer);
+					messageToSendFlag = false;
+				}
+			}
+			socket.Close();
+		}
+
+		public string Message
+		{
+			get
+			{
+				if (messageReceivedFlag)
+					return messageReceived;
+				else
+					return null;
+			}
+			set
+			{
+				messageToSend = value;
+				messageToSendFlag = true;
+			}
 		}
 
 		public string getMessage()
@@ -39,54 +95,15 @@ namespace TCPServer
 				return null;
 		}
 
-		private void ListenForClients()
+		public void setMessage(string message)
 		{
-			this.tcpListener.Start();
-			while(true)
-			{
-				TcpClient client = this.tcpListener.AcceptTcpClient();
-				Thread clientThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
-				clientThread.Start(client);
-			}
+			this.messageToSend = message;
+			this.messageToSendFlag = true;
 		}
 
-		private void HandleClientComm(object client)
+		~Server()
 		{
-			TcpClient tcpClient = (TcpClient)client;
-			NetworkStream clientStream = tcpClient.GetStream();
-
-			byte[] message = new byte[4096];
-			int bytesRead;
-
-			while(true)
-			{
-				bytesRead = 0;
-				try
-				{
-					bytesRead = clientStream.Read(message, 0, 4096);
-				}
-				catch
-				{
-					break;
-				}
-				if(bytesRead == 0)
-				{
-					break;
-				}
-				ASCIIEncoding encoder = new ASCIIEncoding();
-				messageReceived = encoder.GetString(message, 0, bytesRead);
-				messageReceivedFlag = true;
-
-				if(messageToSendFlag)
-				{
-					byte[] buffer = encoder.GetBytes(messageToSend);
-					clientStream.Write(buffer, 0, buffer.Length);
-					clientStream.Flush();
-					messageToSendFlag = false;
-				}
-			}
-			tcpClient.Close();
+			tcpListener.Stop();
 		}
-
 	}
 }

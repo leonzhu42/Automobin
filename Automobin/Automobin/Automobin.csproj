@@ -149,6 +149,7 @@
     </ApplicationDefinition>
     <Compile Include="EmguImageExtensions.cs" />
     <Compile Include="ImageExtentions.cs" />
+    <Compile Include="Server%28unusable%29.cs" />
     <Compile Include="Server.cs" />
     <Compile Include="Vectors.cs" />
     <Page Include="MainWindow.xaml">

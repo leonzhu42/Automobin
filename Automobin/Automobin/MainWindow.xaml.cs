@@ -46,6 +46,8 @@ namespace Automobin
 		private List<Span> recognitionSpans;
 		// Server
 		private Server server;
+		// JSON to send
+		private string message;
 		// Current state
 		// 0: Standby
 		// 1: Running
@@ -62,6 +64,7 @@ namespace Automobin
 		private int localWidth = 50;
 		private int localHeight = 50;
 		// Skeleton image
+		/*
 		private const float RenderWidth = 640.0f;
 		private const float RenderHeight = 480.0f;
 		private const double JointThickness = 3;
@@ -73,7 +76,7 @@ namespace Automobin
 		private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
 		private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
 		private DrawingGroup drawingGroup;
-		private DrawingImage skeletonImage;
+		*/
 		// Hand Positions
 		private DepthImagePoint rightHandDepthPoint;
 		private SkeletonPoint rightHandSkeletonPoint;
@@ -193,22 +196,6 @@ namespace Automobin
 				}
 			if(this.sensor != null)
 			{
-				/*
-				this.drawingGroup = new DrawingGroup();
-				this.skeletonImage = new DrawingImage(this.drawingGroup);
-				this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
-				//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
-				this.sensor.SkeletonStream.Enable();
-				this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-				//this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
-				//this.DepthImage.Source = this.depthColorBitmap;
-				//this.ColorImage.Source = this.colorColorBitmap;
-				this.SkeletonImage.Source = this.skeletonImage;
-				//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
-				//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
-				//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
-				this.sensor.AllFramesReady += this.SensorAllFramesReady;
-				*/
 				try
 				{
 					this.sensor.Start();
@@ -219,12 +206,17 @@ namespace Automobin
 					this.sensor = null;
 				}
 			}
+			
 			if (this.sensor == null)
 			{
 				this.statusBarText.Text = Properties.Resources.NoKinectReady;
+
+				// The following line is for test without Kinect only.
+				server = new Server();
+
 				return;
 			}
-
+			
 
 			RecognizerInfo recognizerInfo = GetKinectRecognizer();
 			if(recognizerInfo != null)
@@ -274,19 +266,10 @@ namespace Automobin
 				if(e.Result.Semantics.Value.ToString() == "START")
 				{
 					// Start depth and skeleton
-					this.drawingGroup = new DrawingGroup();
-					//this.skeletonImage = new DrawingImage(this.drawingGroup);
 					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
 					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-					//this.depthColorPixels = new byte[this.sensor.DepthStream.FramePixelDataLength * sizeof(int)];
-					//this.DepthImage.Source = this.depthColorBitmap;
-					//this.ColorImage.Source = this.colorColorBitmap;
-					//this.SkeletonImage.Source = this.skeletonImage;
-					//this.sensor.DepthFrameReady += this.SensorDepthFrameReady;
-					//this.sensor.ColorFrameReady += this.SensorColorFrameReady;
-					//this.sensor.SkeletonFrameReady += this.SensorSkeletonFrameReady;
 					this.sensor.AllFramesReady += this.SensorAllFramesReady;
 				}
 			}
@@ -309,29 +292,6 @@ namespace Automobin
 				}
 				else
 					return;
-			}
-
-			// Draw the skeletons
-			using (DrawingContext dc = this.drawingGroup.Open())
-			{
-				dc.DrawRectangle(Brushes.Black, null, new Rect(0.0, 0.0, RenderWidth, RenderHeight));
-				if (skeletons.Length != 0)
-				{
-					foreach (Skeleton skel in skeletons)
-					{
-						RenderClippedEdges(skel, dc);
-						if (skel.TrackingState == SkeletonTrackingState.Tracked)
-							this.DrawBonesAndJoints(skel, dc);
-						else if (skel.TrackingState == SkeletonTrackingState.PositionOnly)
-							dc.DrawEllipse(
-								this.centerPointBrush,
-								null,
-								this.SkeletonPointToScreen(skel.Position),
-									BodyCenterThickness,
-									BodyCenterThickness);
-					}
-				}
-				this.drawingGroup.ClipGeometry = new RectangleGeometry(new Rect(0.0, 0.0, RenderWidth, RenderHeight));
 			}
 
 			// Get the depth
@@ -408,7 +368,6 @@ namespace Automobin
 
 					this.sensor.DepthStream.Disable();
 					this.sensor.SkeletonStream.Disable();
-					//this.SkeletonImage.Source = null;
 					this.sensor.AllFramesReady -= this.SensorAllFramesReady;
 					state = 0;
 				}
@@ -594,126 +553,22 @@ namespace Automobin
 			server.setMessage(message);
 		}
 
-		private static void RenderClippedEdges(Skeleton skeleton, DrawingContext drawingContext)
+		private void SendLocationToBinTest(int x, int y)
 		{
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Bottom))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, RenderHeight - ClipBoundsThickness, RenderWidth, ClipBoundsThickness));
-			}
+			StringWriter stringWriter = new StringWriter();
+			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
 
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Top))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, 0, RenderWidth, ClipBoundsThickness));
-			}
+			jsonWriter.WriteStartObject();
+			jsonWriter.WritePropertyName("x");
+			jsonWriter.WriteValue(x);
+			jsonWriter.WritePropertyName("y");
+			jsonWriter.WriteValue(y);
+			jsonWriter.WriteEndObject();
+			jsonWriter.Flush();
 
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Left))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(0, 0, ClipBoundsThickness, RenderHeight));
-			}
+			message = stringWriter.GetStringBuilder().ToString();
 
-			if (skeleton.ClippedEdges.HasFlag(FrameEdges.Right))
-			{
-				drawingContext.DrawRectangle(
-					Brushes.Red,
-					null,
-					new Rect(RenderWidth - ClipBoundsThickness, 0, ClipBoundsThickness, RenderHeight));
-			}
-		}
-
-		private void DrawBonesAndJoints(Skeleton skeleton, DrawingContext drawingContext)
-		{
-			// Render Torso
-            this.DrawBone(skeleton, drawingContext, JointType.Head, JointType.ShoulderCenter);
-            this.DrawBone(skeleton, drawingContext, JointType.ShoulderCenter, JointType.ShoulderLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.ShoulderCenter, JointType.ShoulderRight);
-            this.DrawBone(skeleton, drawingContext, JointType.ShoulderCenter, JointType.Spine);
-            this.DrawBone(skeleton, drawingContext, JointType.Spine, JointType.HipCenter);
-            this.DrawBone(skeleton, drawingContext, JointType.HipCenter, JointType.HipLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.HipCenter, JointType.HipRight);
-
-            // Left Arm
-            this.DrawBone(skeleton, drawingContext, JointType.ShoulderLeft, JointType.ElbowLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.ElbowLeft, JointType.WristLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.WristLeft, JointType.HandLeft);
-
-            // Right Arm
-            this.DrawBone(skeleton, drawingContext, JointType.ShoulderRight, JointType.ElbowRight);
-            this.DrawBone(skeleton, drawingContext, JointType.ElbowRight, JointType.WristRight);
-            this.DrawBone(skeleton, drawingContext, JointType.WristRight, JointType.HandRight);
-
-            // Left Leg
-            this.DrawBone(skeleton, drawingContext, JointType.HipLeft, JointType.KneeLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.KneeLeft, JointType.AnkleLeft);
-            this.DrawBone(skeleton, drawingContext, JointType.AnkleLeft, JointType.FootLeft);
-
-            // Right Leg
-            this.DrawBone(skeleton, drawingContext, JointType.HipRight, JointType.KneeRight);
-            this.DrawBone(skeleton, drawingContext, JointType.KneeRight, JointType.AnkleRight);
-            this.DrawBone(skeleton, drawingContext, JointType.AnkleRight, JointType.FootRight);
- 
-            // Render Joints
-            foreach (Joint joint in skeleton.Joints)
-            {
-                Brush drawBrush = null;
-
-                if (joint.TrackingState == JointTrackingState.Tracked)
-                {
-                    drawBrush = this.trackedJointBrush;                    
-                }
-                else if (joint.TrackingState == JointTrackingState.Inferred)
-                {
-                    drawBrush = this.inferredJointBrush;                    
-                }
-
-                if (drawBrush != null)
-                {
-                    drawingContext.DrawEllipse(drawBrush, null, this.SkeletonPointToScreen(joint.Position), JointThickness, JointThickness);
-                }
-            }
-		}
-
-		private Point SkeletonPointToScreen(SkeletonPoint skelPoint)
-		{
-			DepthImagePoint depthPoint = this.sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(skelPoint, DepthImageFormat.Resolution640x480Fps30);
-			return new Point(depthPoint.X, depthPoint.Y);
-		}
-
-		private void DrawBone(Skeleton skeleton, DrawingContext drawingContext, JointType jointType0, JointType jointType1)
-		{
-			Joint joint0 = skeleton.Joints[jointType0];
-			Joint joint1 = skeleton.Joints[jointType1];
-
-			// If we can't find either of these joints, exit
-			if (joint0.TrackingState == JointTrackingState.NotTracked ||
-				joint1.TrackingState == JointTrackingState.NotTracked)
-			{
-				return;
-			}
-
-			// Don't draw if both points are inferred
-			if (joint0.TrackingState == JointTrackingState.Inferred &&
-				joint1.TrackingState == JointTrackingState.Inferred)
-			{
-				return;
-			}
-
-			// We assume all drawn bones are inferred unless BOTH joints are tracked
-			Pen drawPen = this.inferredBonePen;
-			if (joint0.TrackingState == JointTrackingState.Tracked && joint1.TrackingState == JointTrackingState.Tracked)
-			{
-				drawPen = this.trackedBonePen;
-			}
-
-			drawingContext.DrawLine(drawPen, this.SkeletonPointToScreen(joint0.Position), this.SkeletonPointToScreen(joint1.Position));
+			server.Message = message;
 		}
 
 		private bool AltDown = false;
@@ -730,6 +585,26 @@ namespace Automobin
 		{
 			if (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)
 				AltDown = false;
+		}
+
+		private void Button_Click(object sender, RoutedEventArgs e)
+		{
+			string stringX = textX.Text;
+			int x = 0;
+			for(int i = 0; i < stringX.Length; ++i)
+				if(stringX[i] < '0' || stringX[i] > '9')
+					return;
+				else
+					x = x * 10 + (int)stringX[i] - (int)'0';
+			
+			string stringY = textY.Text;
+			int y = 0;
+			for(int i = 0; i < stringY.Length; ++i)
+				if(stringY[i] < '0' || stringY[i] > '9')
+					return;
+				else
+					y = y * 10 + (int)stringY[i] - (int)'0';
+			SendLocationToBinTest(x, y);
 		}
 
 	}
