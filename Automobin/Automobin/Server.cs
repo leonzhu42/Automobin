@@ -68,6 +68,7 @@ namespace Automobin
 					messageToSendFlag = false;
 				}
 			}
+			socket.Close();
 		}
 
 		public string Message
