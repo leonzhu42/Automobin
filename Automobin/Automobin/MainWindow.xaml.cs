@@ -40,67 +40,67 @@ namespace Automobin
 	{
 		// Kinect sensor
 		private KinectSensor sensor;
+
 		// Speech recognition engine
 		private SpeechRecognitionEngine speechEngine;
+		
 		// Span elements to select recognized text
 		private List<Span> recognitionSpans;
+		
 		// Server
 		private Server server;
+		
 		// JSON to send
 		private string message;
+		
 		// Current state
 		// 0: Standby
 		// 1: Running
 		// -1: Stopped
 		private int state = -1;
+		
 		// Color images
 		private Image<Bgr, Int32> colorFrameImage;
+		
 		// Depth images
 		private DepthImagePixel[] depthPixels;
 		//private WriteableBitmap depthColorBitmap;
 		//private byte[] depthColorPixels;
-		private int frameWidth;
-		private int frameHeight;
+		private int depthFrameWidth;
+		private int depthFrameHeight;
 		private int bytesPerPixel;
-		private Image<Gray, Int32> frameImage;
+		private Image<Gray, Int32> depthFrameImage;
+		
 		//Local image
 		private int localWidth = 50;
 		private int localHeight = 50;
-		// Skeleton image
-		/*
-		private const float RenderWidth = 640.0f;
-		private const float RenderHeight = 480.0f;
-		private const double JointThickness = 3;
-		private const double BodyCenterThickness = 10;
-		private const double ClipBoundsThickness = 10;
-		private readonly Brush centerPointBrush = Brushes.Blue;
-		private readonly Brush trackedJointBrush = new SolidColorBrush(Color.FromArgb(255, 68, 192, 68));
-		private readonly Brush inferredJointBrush = Brushes.Yellow;
-		private readonly Pen trackedBonePen = new Pen(Brushes.Green, 6);
-		private readonly Pen inferredBonePen = new Pen(Brushes.Gray, 1);
-		private DrawingGroup drawingGroup;
-		*/
+		
 		// Hand Positions
 		private DepthImagePoint rightHandDepthPoint;
 		private SkeletonPoint rightHandSkeletonPoint;
 		private DepthImagePoint leftHandDepthPoint;
 		private SkeletonPoint leftHandSkeletonPoint;
+		
 		// Trash Position
 		private DepthImagePoint trashDepthPoint;
 		private List<DepthImagePoint> trashDepthPoints;
+		
 		// Time between frames
-		//private bool firstFrame = true;
 		private List<long> frameTimes;
 		private Stopwatch currentStopwatch;
+		
 		// Velocity vectors
 		private List<Velocity> velocities;
 		private List<DepthImagePoint> landingPoints;
+		
 		// Thresholds
 		private static double LandingThreshold = 5.0;
 		private static double ObjectThreshold = 10.0;
 		private static double BackgroundColor = 255;
+		
 		// Gravity constant
 		private static double g = 9.794;
+		
 		// Notify icon
 		private System.Windows.Forms.NotifyIcon notifyIcon;
 
@@ -316,11 +316,11 @@ namespace Automobin
 			{
 				if (depthFrame != null)
 				{
-					frameWidth = depthFrame.Width;
-					frameHeight = depthFrame.Height;
+					depthFrameWidth = depthFrame.Width;
+					depthFrameHeight = depthFrame.Height;
 					bytesPerPixel = depthFrame.BytesPerPixel;
 					// Convert the image to a Emgu image
-					frameImage = depthFrame.ToOpenCVImage<Gray, Int32>();
+					depthFrameImage = depthFrame.ToOpenCVImage<Gray, Int32>();
 					// Copy the pixel data from the image to a temporary array
 					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
 				}
@@ -406,13 +406,13 @@ namespace Automobin
 		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
 		{
 			// Get the binarilized local image.
-			int stride = frameWidth * bytesPerPixel;
+			int stride = depthFrameWidth * bytesPerPixel;
 			
 			int left = trashPoint.X - localWidth / 2;
 			int down = trashPoint.Y - localHeight / 2;
 
 			Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
-			CvInvoke.cvGetSubRect(frameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+			CvInvoke.cvGetSubRect(depthFrameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
 
 			Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
 
@@ -463,13 +463,13 @@ namespace Automobin
 			foreach (DepthImagePoint handPoint in handPoints)
 			{
 				// Get the binarilized local image.
-				int stride = frameWidth * bytesPerPixel;
+				int stride = depthFrameWidth * bytesPerPixel;
 
 				int left = trashPoint.X - localWidth / 2;
 				int down = trashPoint.Y - localHeight / 2;
 
 				Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
-				CvInvoke.cvGetSubRect(frameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+				CvInvoke.cvGetSubRect(depthFrameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
 
 				Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
 
