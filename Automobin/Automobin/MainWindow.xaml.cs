@@ -53,6 +53,8 @@ namespace Automobin
 		// 1: Running
 		// -1: Stopped
 		private int state = -1;
+		// Color images
+		private Image<Bgr, Int32> colorFrameImage;
 		// Depth images
 		private DepthImagePixel[] depthPixels;
 		//private WriteableBitmap depthColorBitmap;
@@ -285,10 +287,19 @@ namespace Automobin
 		{
 			if (state == -1)
 				return;
-			// Get the skeleton frame
+			
+			// Get the color
+			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
+			{
+				if (colorFrame != null)
+					colorFrameImage = colorFrame.ToOpenCVImage<Bgr, Int32>();
+				else
+					return;
+			}
+			
+			// Get the skeletons
 			Skeleton[] skeletons = new Skeleton[0];
 
-			// Get the skeletons
 			using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
 			{
 				if (skeletonFrame != null)
@@ -316,6 +327,11 @@ namespace Automobin
 				else
 					return;
 			}
+
+			// Locate Automobin
+			DepthImagePoint binPoint = new DepthImagePoint();
+			bool binFound = false;
+			FindAutomobin(ref binPoint, ref binFound);
 
 			// Check the state
 			if (state == 0)
@@ -366,7 +382,12 @@ namespace Automobin
 				frameTimes.Add(time);
 
 				DepthImagePoint landingPoint = PredictLandingPoint();
-				SendLocationToBin(landingPoint);
+
+				if (!binFound)
+					SendLocationToBin(landingPoint);
+				else
+					SendLocationToBin(landingPoint, binPoint);
+
 				if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
 				{
 					currentStopwatch.Stop();
@@ -549,11 +570,43 @@ namespace Automobin
 			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
 
 			jsonWriter.WriteStartObject();
+
+			// Write the landing point
 			jsonWriter.WritePropertyName("x");
 			jsonWriter.WriteValue(landingPoint.X);
 			jsonWriter.WritePropertyName("y");
 			jsonWriter.WriteValue(landingPoint.Y);
+
 			jsonWriter.WriteEndObject();
+
+			jsonWriter.Flush();
+
+			string message = stringWriter.GetStringBuilder().ToString();
+
+			server.setMessage(message);
+		}
+
+		private void SendLocationToBin(DepthImagePoint landingPoint, DepthImagePoint binPoint)
+		{
+			StringWriter stringWriter = new StringWriter();
+			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
+
+			jsonWriter.WriteStartObject();
+
+			// Write the landing point
+			jsonWriter.WritePropertyName("x");
+			jsonWriter.WriteValue(landingPoint.X);
+			jsonWriter.WritePropertyName("y");
+			jsonWriter.WriteValue(landingPoint.Depth);
+
+			// Write Automobin's location
+			jsonWriter.WritePropertyName("binx");
+			jsonWriter.WriteValue(binPoint.X);
+			jsonWriter.WritePropertyName("biny");
+			jsonWriter.WriteValue(binPoint.Depth);
+
+			jsonWriter.WriteEndObject();
+
 			jsonWriter.Flush();
 
 			string message = stringWriter.GetStringBuilder().ToString();
@@ -579,6 +632,62 @@ namespace Automobin
 			server.Message = message;
 		}
 
+		private void FindAutomobin(ref DepthImagePoint binPoint, ref bool binFound)
+		{
+			// Convert all the green pixels to pure green.
+			Image<Bgr, Int32> tempImage = colorFrameImage.Copy();
+			for(int i = 0; i < colorFrameImage.Width; ++i)
+				for(int j = 0; j < colorFrameImage.Height; ++j)
+					if(colorFrameImage[i, j].Green > colorFrameImage[i, j].Red && colorFrameImage[i, j].Green > colorFrameImage[i, j].Blue)
+						tempImage[i, j] = new Bgr(0, 255, 0);
+
+			// Floodfill and count the sizes of green areas
+			// The largest one is Automobin
+			Image<Gray, Int32> mask = new Image<Gray, Int32>(tempImage.Width + 2, tempImage.Height + 2);
+			
+			bool[,] visited = new bool[tempImage.Width, tempImage.Height];
+			
+			double maxArea = 0;
+			int colorX = 0;
+			int colorY = 0;
+
+			for(int i = 0; i < tempImage.Width; ++i)
+				for(int j = 0; j < tempImage.Height; ++j)
+					if(tempImage[i, j].Green == 255)
+					{
+						MCvConnectedComp comp = new MCvConnectedComp();
+						CvInvoke.cvFloodFill(
+							tempImage,
+							new System.Drawing.Point(i, j),
+							new MCvScalar(255, 255, 255, 255),
+							new MCvScalar(0),
+							new MCvScalar(0),
+							out comp,
+							Emgu.CV.CvEnum.CONNECTIVITY.EIGHT_CONNECTED,
+							Emgu.CV.CvEnum.FLOODFILL_FLAG.DEFAULT,
+							mask);
+						if(comp.area > maxArea)
+						{
+							maxArea = comp.area;
+							colorX = comp.rect.X + comp.rect.Width / 2;
+							colorY = comp.rect.Y + comp.rect.Height / 2;
+						}
+					}
+			if(maxArea == 0)
+			{
+				binFound = false;
+				return;
+			}
+
+			// Map color location to depth location
+			DepthImagePoint[] depthPoints = new DepthImagePoint[tempImage.Width * tempImage.Height];
+			sensor.CoordinateMapper.MapColorFrameToDepthFrame(sensor.ColorStream.Format, sensor.DepthStream.Format, depthPixels, depthPoints);
+
+			long index = colorX * tempImage.Width + colorY;
+			binPoint = depthPoints[index];
+			binFound = true;
+		}
+		
 		private bool AltDown = false;
 
 		private void Window_KeyDown(object sender, KeyEventArgs e)
