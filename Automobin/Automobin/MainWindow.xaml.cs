@@ -51,7 +51,8 @@ namespace Automobin
 		// Current state
 		// 0: Standby
 		// 1: Running
-		private int state = 0;
+		// -1: Stopped
+		private int state = -1;
 		// Depth images
 		private DepthImagePixel[] depthPixels;
 		//private WriteableBitmap depthColorBitmap;
@@ -204,6 +205,7 @@ namespace Automobin
 				catch(IOException)
 				{
 					this.sensor = null;
+					server = null;
 				}
 			}
 			
@@ -216,7 +218,6 @@ namespace Automobin
 
 				return;
 			}
-			
 
 			RecognizerInfo recognizerInfo = GetKinectRecognizer();
 			if(recognizerInfo != null)
@@ -265,12 +266,15 @@ namespace Automobin
 			{
 				if(e.Result.Semantics.Value.ToString() == "START")
 				{
+					state = 0;
+					
 					// Start depth and skeleton
 					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
 					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
 					this.sensor.AllFramesReady += this.SensorAllFramesReady;
+					
 				}
 			}
 		}
@@ -279,6 +283,8 @@ namespace Automobin
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
+			if (state == -1)
+				return;
 			// Get the skeleton frame
 			Skeleton[] skeletons = new Skeleton[0];
 
@@ -319,6 +325,8 @@ namespace Automobin
 				Skeleton skeleton = (from s in skeletons
 									 where s.TrackingState == SkeletonTrackingState.Tracked
 									 select s).FirstOrDefault();
+				if (skeleton == null)
+					return;
 				// Right hand
 				Joint rightHand = skeleton.Joints[JointType.HandRight];
 				rightHandSkeletonPoint = rightHand.Position;
@@ -369,7 +377,7 @@ namespace Automobin
 					this.sensor.DepthStream.Disable();
 					this.sensor.SkeletonStream.Disable();
 					this.sensor.AllFramesReady -= this.SensorAllFramesReady;
-					state = 0;
+					state = -1;
 				}
 			}
 		}
