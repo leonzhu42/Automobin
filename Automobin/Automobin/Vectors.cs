@@ -10,7 +10,7 @@ using System.Drawing;
 
 namespace Automobin
 {
-	class GeneralVector
+	abstract class GeneralVector
 	{
 		/*
 		 * type: 0 for plane; 1 for space

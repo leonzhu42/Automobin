@@ -14,6 +14,7 @@ namespace Automobin
 		private IPAddress ipAddress;
 		private TcpListener tcpListener;
 		private Thread listenThread;
+		private Thread socketThread;
 		private Socket socket;
 		
 		private string messageToSend;
@@ -23,19 +24,26 @@ namespace Automobin
 
 		private ASCIIEncoding encoder;
 
+		private bool shouldStop = false;
+
 		public Server()
 		{
 			encoder = new ASCIIEncoding();
-			this.ipAddress = IPAddress.Parse("192.168.1.1");
-			this.tcpListener = new TcpListener(ipAddress, 8234);
+			//this.ipAddress = IPAddress.Parse("192.168.1.1");
+			//this.tcpListener = new TcpListener(ipAddress, 8234);
+			this.tcpListener = new TcpListener(IPAddress.Any, 8234);
+
 			this.listenThread = new Thread(new ThreadStart(ListenForClient));
+			listenThread.Name = "Listen Thread";
+			listenThread.Start();
 		}
 
 		private void ListenForClient()
 		{
 			this.tcpListener.Start();
 			socket = tcpListener.AcceptSocket();
-			Thread socketThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
+			socketThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
+			socketThread.Name = "Socket Thread";
 			socketThread.Start(socket);
 		}
 
@@ -45,7 +53,7 @@ namespace Automobin
 			byte[] message = new byte[4096];
 			int bytesRead;
 
-			while(true)
+			while(!shouldStop)
 			{
 				bytesRead = 0;
 				try
@@ -87,23 +95,16 @@ namespace Automobin
 			}
 		}
 
-		public string getMessage()
+		public void RequestStop()
 		{
-			if (messageReceivedFlag)
-				return messageReceived;
-			else
-				return null;
-		}
-
-		public void setMessage(string message)
-		{
-			this.messageToSend = message;
-			this.messageToSendFlag = true;
+			shouldStop = true;
 		}
 
 		~Server()
 		{
 			tcpListener.Stop();
+			listenThread.Abort();
+			socketThread.Abort();
 		}
 	}
 }

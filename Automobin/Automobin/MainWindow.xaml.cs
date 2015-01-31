@@ -162,6 +162,9 @@ namespace Automobin
 				this.speechEngine.RecognizeAsyncStop();
 			}
 
+			server.RequestStop();
+			server = null;
+
 			notifyIcon.Dispose();
 			System.Windows.Application.Current.Shutdown();
 		}
@@ -222,7 +225,6 @@ namespace Automobin
 
 				// The following line is for test without Kinect only.
 				server = new Server();
-
 				return;
 			}
 
@@ -588,7 +590,7 @@ namespace Automobin
 
 			string message = stringWriter.GetStringBuilder().ToString();
 
-			server.setMessage(message);
+			server.Message = message;
 		}
 
 		private void SendLocationToBin(DepthImagePoint landingPoint, DepthImagePoint binPoint)
@@ -615,24 +617,6 @@ namespace Automobin
 			jsonWriter.Flush();
 
 			string message = stringWriter.GetStringBuilder().ToString();
-
-			server.setMessage(message);
-		}
-
-		private void SendLocationToBinTest(int x, int y)
-		{
-			StringWriter stringWriter = new StringWriter();
-			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
-
-			jsonWriter.WriteStartObject();
-			jsonWriter.WritePropertyName("x");
-			jsonWriter.WriteValue(x);
-			jsonWriter.WritePropertyName("y");
-			jsonWriter.WriteValue(y);
-			jsonWriter.WriteEndObject();
-			jsonWriter.Flush();
-
-			message = stringWriter.GetStringBuilder().ToString();
 
 			server.Message = message;
 		}
@@ -708,26 +692,5 @@ namespace Automobin
 			if (e.SystemKey == Key.LeftAlt || e.SystemKey == Key.RightAlt)
 				AltDown = false;
 		}
-
-		private void Button_Click(object sender, RoutedEventArgs e)
-		{
-			string stringX = textX.Text;
-			int x = 0;
-			for(int i = 0; i < stringX.Length; ++i)
-				if(stringX[i] < '0' || stringX[i] > '9')
-					return;
-				else
-					x = x * 10 + (int)stringX[i] - (int)'0';
-			
-			string stringY = textY.Text;
-			int y = 0;
-			for(int i = 0; i < stringY.Length; ++i)
-				if(stringY[i] < '0' || stringY[i] > '9')
-					return;
-				else
-					y = y * 10 + (int)stringY[i] - (int)'0';
-			SendLocationToBinTest(x, y);
-		}
-
 	}
 }
