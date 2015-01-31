@@ -58,6 +58,9 @@ namespace Automobin
 		// 1: Running
 		// -1: Stopped
 		private int state = -1;
+
+		// Event handler
+		private EventHandler<AllFramesReadyEventArgs> handler;
 		
 		// Color images
 		private Image<Bgr, Int32> colorFrameImage;
@@ -203,6 +206,8 @@ namespace Automobin
 				{
 					this.sensor.Start();
 					server = new Server();
+
+					handler = new EventHandler<AllFramesReadyEventArgs>(SensorAllFramesReady);
 				}
 				catch(IOException)
 				{
@@ -275,8 +280,8 @@ namespace Automobin
 					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-					this.sensor.AllFramesReady += this.SensorAllFramesReady;
-					
+
+					this.sensor.AllFramesReady += handler;
 				}
 			}
 		}
@@ -397,7 +402,7 @@ namespace Automobin
 
 					this.sensor.DepthStream.Disable();
 					this.sensor.SkeletonStream.Disable();
-					this.sensor.AllFramesReady -= this.SensorAllFramesReady;
+					this.sensor.AllFramesReady -= handler;
 					state = -1;
 				}
 			}
