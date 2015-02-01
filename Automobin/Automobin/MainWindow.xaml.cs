@@ -28,7 +28,6 @@ using Emgu.Util;
 using Emgu.CV.Structure;
 using Emgu.CV.Features2D;
 using Newtonsoft.Json;
-using TCPServer;
 using ImageManipulationExtensionMethods;
 
 namespace Automobin
@@ -158,7 +157,6 @@ namespace Automobin
 			if (this.speechEngine != null)
 			{
 				this.speechEngine.SpeechRecognized -= SpeechRecognized;
-				this.speechEngine.SpeechRecognitionRejected -= SpeechRejected;
 				this.speechEngine.RecognizeAsyncStop();
 			}
 
@@ -181,18 +179,6 @@ namespace Automobin
 					this.Activate();
 				}
 			}
-		}
-
-		private static RecognizerInfo GetKinectRecognizer()
-		{
-			foreach(RecognizerInfo recognizer in SpeechRecognitionEngine.InstalledRecognizers())
-			{
-				string value;
-				recognizer.AdditionalInfo.TryGetValue("Kinect", out value);
-				if ("True".Equals(value, StringComparison.OrdinalIgnoreCase) && "en-US".Equals(recognizer.Culture.Name, StringComparison.OrdinalIgnoreCase))
-					return recognizer;
-			}
-			return null;
 		}
 
 		private void WindowLoaded(object sender, RoutedEventArgs e)
@@ -222,9 +208,6 @@ namespace Automobin
 			if (this.sensor == null)
 			{
 				this.statusBarText.Text = Properties.Resources.NoKinectReady;
-
-				// The following line is for test without Kinect only.
-				server = new Server();
 				return;
 			}
 
@@ -245,7 +228,6 @@ namespace Automobin
 				speechEngine.LoadGrammar(grammar);
 
 				speechEngine.SpeechRecognized += SpeechRecognized;
-				speechEngine.SpeechRecognitionRejected += SpeechRejected;
 
 				// For long recognition sessions, add the following code.
 				//speechEngine.UpdateRecognizerSetting("AdaptationOn", 0);
@@ -260,6 +242,18 @@ namespace Automobin
 			}
 		}
 
+		private static RecognizerInfo GetKinectRecognizer()
+		{
+			foreach (RecognizerInfo recognizer in SpeechRecognitionEngine.InstalledRecognizers())
+			{
+				string value;
+				recognizer.AdditionalInfo.TryGetValue("Kinect", out value);
+				if ("True".Equals(value, StringComparison.OrdinalIgnoreCase) && "en-US".Equals(recognizer.Culture.Name, StringComparison.OrdinalIgnoreCase))
+					return recognizer;
+			}
+			return null;
+		}
+		
 		private void WindowClosing(object sender, System.ComponentModel.CancelEventArgs e) { }
 
 		private void DragWindow(object sender, MouseButtonEventArgs e)
@@ -277,9 +271,9 @@ namespace Automobin
 				{
 					state = 0;
 					
-					// Start depth and skeleton
+					// Start color, depth and skeleton
+					this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
-					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
 
@@ -287,8 +281,6 @@ namespace Automobin
 				}
 			}
 		}
-
-		private void SpeechRejected(object sender, SpeechRecognitionRejectedEventArgs e) { }
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
@@ -303,7 +295,7 @@ namespace Automobin
 				else
 					return;
 			}
-			
+
 			// Get the skeletons
 			Skeleton[] skeletons = new Skeleton[0];
 
@@ -384,7 +376,14 @@ namespace Automobin
 				currentStopwatch.Restart();
 				UpdateTrashLocation(ref trashDepthPoint);
 				DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
-				Velocity velocity = new Velocity(lastTrashDepthPoint.X, lastTrashDepthPoint.Y, lastTrashDepthPoint.Depth, trashDepthPoint.X, trashDepthPoint.Y, trashDepthPoint.Depth, time);
+				Velocity velocity = new Velocity(
+					lastTrashDepthPoint.X,
+					lastTrashDepthPoint.Y,
+					lastTrashDepthPoint.Depth,
+					trashDepthPoint.X,
+					trashDepthPoint.Y,
+					trashDepthPoint.Depth,
+					time);
 				trashDepthPoints.Add(trashDepthPoint);
 				frameTimes.Add(time);
 
@@ -484,7 +483,6 @@ namespace Automobin
 
 				// Now both hand and trash are white.
 				// Floodfill hand into black.
-
 				MCvScalar black = new MCvScalar(255);
 				MCvScalar objectThresholdScalar = new MCvScalar(ObjectThreshold);
 				MCvConnectedComp comp = new MCvConnectedComp();
@@ -573,6 +571,7 @@ namespace Automobin
 
 		private void SendLocationToBin(DepthImagePoint landingPoint)
 		{
+			/*
 			StringWriter stringWriter = new StringWriter();
 			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
 
@@ -582,19 +581,23 @@ namespace Automobin
 			jsonWriter.WritePropertyName("x");
 			jsonWriter.WriteValue(landingPoint.X);
 			jsonWriter.WritePropertyName("y");
-			jsonWriter.WriteValue(landingPoint.Y);
+			jsonWriter.WriteValue(landingPoint.Depth);
 
 			jsonWriter.WriteEndObject();
 
 			jsonWriter.Flush();
 
 			string message = stringWriter.GetStringBuilder().ToString();
+			*/
+
+			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Depth + "}";
 
 			server.Message = message;
 		}
 
 		private void SendLocationToBin(DepthImagePoint landingPoint, DepthImagePoint binPoint)
 		{
+			/*
 			StringWriter stringWriter = new StringWriter();
 			JsonWriter jsonWriter = new JsonTextWriter(stringWriter);
 
@@ -617,6 +620,9 @@ namespace Automobin
 			jsonWriter.Flush();
 
 			string message = stringWriter.GetStringBuilder().ToString();
+			*/
+
+			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Depth + ",\"binx\":" + binPoint.X + ",\"biny\":" + binPoint.Depth + "}";
 
 			server.Message = message;
 		}

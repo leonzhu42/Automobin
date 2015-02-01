@@ -40,6 +40,8 @@ namespace Automobin
 
 		private void ListenForClient()
 		{
+			if (shouldStop)
+				return;
 			this.tcpListener.Start();
 			socket = tcpListener.AcceptSocket();
 			socketThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
