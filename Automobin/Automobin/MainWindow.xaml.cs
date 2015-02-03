@@ -160,8 +160,11 @@ namespace Automobin
 				this.speechEngine.RecognizeAsyncStop();
 			}
 
-			server.RequestStop();
-			server = null;
+			if (server != null)
+			{
+				server.RequestStop();
+				server = null;
+			}
 
 			notifyIcon.Dispose();
 			System.Windows.Application.Current.Shutdown();
@@ -284,12 +287,12 @@ namespace Automobin
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
 
 					//this.sensor.AllFramesReady += handler;
-					processNextFrame();
+					ProcessNextFrame();
 				}
 			}
 		}
 
-		private void processNextFrame()
+		private void ProcessNextFrame()
 		{
 			if (state == -1)
 				return;
