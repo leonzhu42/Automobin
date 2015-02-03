@@ -1,0 +1,2 @@
+For the details of the GPL license, please visit the following webpage:
+https://www.gnu.org/licenses/gpl.html
