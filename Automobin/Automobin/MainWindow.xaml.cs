@@ -99,6 +99,7 @@ namespace Automobin
 		private static double LandingThreshold = 5.0;
 		private static double ObjectThreshold = 10.0;
 		private static double BackgroundColor = 255;
+		private static double BlackThreshold = 30;
 		
 		// Gravity constant
 		private static double g = 9.794;
@@ -140,7 +141,7 @@ namespace Automobin
 
 		private void about_Click(object sender, EventArgs e)
 		{
-			MessageBox.Show("Automobin - A project by LGW and ZZY." + Environment.NewLine + "Helps you throw trash easier.", "Automobin", MessageBoxButton.OK, MessageBoxImage.Information);
+			MessageBox.Show("Automobin - A project by LGW and ZZY. Helps you throw trash easier.", "Automobin", MessageBoxButton.OK, MessageBoxImage.Information);
 		}
 
 		private void exit_Click(object sender, EventArgs e)
@@ -769,11 +770,11 @@ namespace Automobin
 
 		private void FindAutomobin(ref DepthImagePoint binPoint, ref bool binFound)
 		{
-			// Convert all the green pixels to pure green.
+			// Convert all the black pixels to pure green.
 			Image<Bgr, Int32> tempImage = colorFrameImage.Copy();
 			for(int i = 0; i < colorFrameImage.Width; ++i)
 				for(int j = 0; j < colorFrameImage.Height; ++j)
-					if(colorFrameImage[i, j].Green > colorFrameImage[i, j].Red && colorFrameImage[i, j].Green > colorFrameImage[i, j].Blue)
+					if(NearBlack(colorFrameImage[i, j]))
 						tempImage[i, j] = new Bgr(0, 255, 0);
 
 			// Floodfill and count the sizes of green areas
@@ -823,6 +824,15 @@ namespace Automobin
 			binFound = true;
 		}
 		
+		private bool NearBlack(Bgr color)
+		{
+			if ((255 - color.Blue <= BlackThreshold) &&
+				(255 - color.Green <= BlackThreshold) &&
+				(255 - color.Red <= BlackThreshold))
+				return true;
+			return false;
+		}
+
 		private bool AltDown = false;
 
 		private void Window_KeyDown(object sender, KeyEventArgs e)
