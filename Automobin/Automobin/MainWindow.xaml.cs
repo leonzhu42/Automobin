@@ -6,6 +6,7 @@ using System.IO;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -20,9 +21,6 @@ using System.Windows.Shapes;
 using Microsoft.Speech.AudioFormat;
 using Microsoft.Speech.Recognition;
 using Microsoft.Kinect;
-using Coding4Fun.Kinect;
-using Coding4Fun.Kinect.Wpf;
-using Coding4Fun.Kinect.Wpf.Controls;
 using Emgu.CV;
 using Emgu.Util;
 using Emgu.CV.Structure;
@@ -62,7 +60,7 @@ namespace Automobin
 		private EventHandler<AllFramesReadyEventArgs> handler;
 		
 		// Color images
-		private Image<Bgr, Int32> colorFrameImage;
+		private Image<Bgr, Byte> colorFrameImage;
 		
 		// Depth images
 		private DepthImagePixel[] depthPixels;
@@ -71,7 +69,7 @@ namespace Automobin
 		private int depthFrameWidth;
 		private int depthFrameHeight;
 		private int bytesPerPixel;
-		private Image<Gray, Int32> depthFrameImage;
+		private Image<Gray, Byte> depthFrameImage;
 		
 		//Local image
 		private int localWidth = 50;
@@ -100,6 +98,10 @@ namespace Automobin
 		private static double ObjectThreshold = 10.0;
 		private static double BackgroundColor = 255;
 		private static double BlackThreshold = 30;
+		private static double SkeletonNotFoundThreshold = 30;
+
+		// Number of frames in which no skeletons are found
+		private int noSkeletonFrames;
 		
 		// Gravity constant
 		private static double g = 9.794;
@@ -197,13 +199,13 @@ namespace Automobin
 			{
 				try
 				{
-					this.sensor.Start();
-					server = new Server();
+					sensor.Start();
+					//server = new Server();
 					handler = new EventHandler<AllFramesReadyEventArgs>(SensorAllFramesReady);
 				}
 				catch(IOException)
 				{
-					this.sensor = null;
+					this.sensor =null ;
 					server = null;
 				}
 			}
@@ -271,11 +273,28 @@ namespace Automobin
 			this.DragMove();
 		}
 
-		private void StartTracking(object sender, MouseButtonEventArgs e)
+		private void StartTracking()
 		{
-			if(!this.sensor.SkeletonStream.IsEnabled)
-				this.sensor.SkeletonStream.Enable();
-			this.sensor.AllFramesReady += handler;
+			//sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+			//sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
+			state = 0;
+			noSkeletonFrames = 0;
+
+			if (!sensor.ColorStream.IsEnabled)
+				sensor.ColorStream.Enable();
+			if (!sensor.DepthStream.IsEnabled)
+				sensor.DepthStream.Enable();
+			if (!sensor.SkeletonStream.IsEnabled)
+				sensor.SkeletonStream.Enable();
+			this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
+			sensor.AllFramesReady += handler;
+
+			//sensor.Start();
+		}
+
+		private void WindowDoubleClicked(object sender, MouseButtonEventArgs e)
+		{
+			StartTracking();
 		}
 
 		private void SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
@@ -283,38 +302,46 @@ namespace Automobin
 			const double ConfidenceThreshold = 0.3;
 
 			if(e.Result.Confidence >= ConfidenceThreshold)
-			{
-				if(e.Result.Semantics.Value.ToString() == "START")
-				{
-					state = 0;
-					
-					// Start color, depth and skeleton
-					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
-					//this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
-					this.sensor.SkeletonStream.Enable();
-					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
-
-					this.sensor.AllFramesReady += handler;
-				}
-			}
+				if (e.Result.Semantics.Value.ToString() == "START")
+					StartTracking();
 		}
 
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
+			if(noSkeletonFrames > SkeletonNotFoundThreshold)
+			{
+				if (currentStopwatch != null)
+					currentStopwatch.Stop();
+				if (trashDepthPoints != null)
+					trashDepthPoints.Clear();
+				if(velocities != null)
+					velocities.Clear();
+				if(landingPoints != null)
+					landingPoints.Clear();
+
+				this.sensor.DepthStream.Disable();
+				this.sensor.SkeletonStream.Disable();
+				this.sensor.AllFramesReady -= handler;
+				state = -1;
+			}	
+
 			if (state == -1)
 				return;
 			
+			/*
 			// Get the color
 			bool colorRetrieved = true;
+			
 			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
 			{
 				if (colorFrame != null)
-					colorFrameImage = colorFrame.ToOpenCVImage<Bgr, Int32>();
+					colorFrameImage = colorFrame.ToOpenCVImage<Bgr, Byte>();
 				else
 					colorRetrieved = false;
 			}
+			*/
 
-			// Get the skeletons
+			// Get the skeleton
 			Skeleton[] skeletons = new Skeleton[0];
 
 			using (SkeletonFrame skeletonFrame = e.OpenSkeletonFrame())
@@ -336,33 +363,67 @@ namespace Automobin
 					depthFrameWidth = depthFrame.Width;
 					depthFrameHeight = depthFrame.Height;
 					bytesPerPixel = depthFrame.BytesPerPixel;
-					// Convert the image to a Emgu image
-					depthFrameImage = depthFrame.ToOpenCVImage<Gray, Int32>();
+
 					// Copy the pixel data from the image to a temporary array
 					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
+
+					int minDepth = depthFrame.MinDepth;
+					int maxDepth = depthFrame.MaxDepth;
+
+					// Convert the image to a Emgu image
+					var tempImage = new Image<Bgr, Byte>(depthFrameWidth, depthFrameHeight);
+					for (int i = 0; i < depthFrameWidth; ++i)
+						for (int j = 0; j < depthFrameHeight; ++j)
+						{
+							short depth = depthPixels[i + j * depthFrameWidth].Depth;
+							byte intensity = (byte)(depth >= minDepth && depth <= maxDepth ? depth : 0);
+							for (int k = 0; k < 3; ++k)
+								tempImage.Data[j, i, k] = intensity;
+						}
+					//tempImage.Save("temp.jpg");
+					depthFrameImage = tempImage.Convert<Gray, Byte>();
+
+					/* Low quality version
+					var alphaImage = depthFrame.ToOpenCVImage<Bgra, Byte>();
+					var tempImage = new Image<Bgr, Byte>(depthFrameWidth, depthFrameHeight);
+					for (int i = 0; i < depthFrameWidth; ++i)
+						for (int j = 0; j < depthFrameHeight; ++j)
+							for (int k = 0; k < 3; ++k)
+								tempImage.Data[j, i, k] = alphaImage.Data[j, i, k];
+					depthFrameImage = tempImage.Convert<Gray, Byte>();
+					*/
 				}
 				else
 					return;
 			}
 
+			//depthFrameImage.Save("depth.jpg");
+
 			DepthImagePoint binPoint = new DepthImagePoint();
 			bool binFound = false;
+			/*
 			if (colorRetrieved)
 			{
 				// Locate Automobin
 				FindAutomobin(ref binPoint, ref binFound);
 			}
+			*/
 
 			// Check the state
 			if (state == 0)
 			{
 				// Standby. Check whether any object nearby is at approximately the same depth as user's hand.
+				
 				// Choose the skeleton to track
 				Skeleton skeleton = (from s in skeletons
 									 where s.TrackingState == SkeletonTrackingState.Tracked
 									 select s).FirstOrDefault();
 				if (skeleton == null)
+				{
+					noSkeletonFrames++;
 					return;
+				}
+
 				// Right hand
 				Joint rightHand = skeleton.Joints[JointType.HandRight];
 				rightHandSkeletonPoint = rightHand.Position;
@@ -405,6 +466,7 @@ namespace Automobin
 					trashDepthPoint.Y,
 					trashDepthPoint.Depth,
 					time);
+				velocities.Add(velocity);
 				trashDepthPoints.Add(trashDepthPoint);
 				frameTimes.Add(time);
 
@@ -433,7 +495,7 @@ namespace Automobin
 		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
 		{
 			// Get the binarilized local image.
-			int stride = depthFrameWidth * bytesPerPixel;
+			int stride = depthFrameWidth;
 			
 			int left = trashPoint.X - localWidth / 2;
 			int down = trashPoint.Y - localHeight / 2;
@@ -451,8 +513,8 @@ namespace Automobin
 
 			// Count the total white pixel number.
 			int whitePixel = 0;
-			for (int i = 0; i < processedLocalImage.Width; ++i)
-				for (int j = 0; j < processedLocalImage.Height; ++j)
+			for (int i = 0; i < processedLocalImage.Height; ++i)
+				for (int j = 0; j < processedLocalImage.Width; ++j)
 					if (Gray.Equals(processedLocalImage[i, j], white))
 						whitePixel++;
 
@@ -460,9 +522,9 @@ namespace Automobin
 
 			// Find midX
 			tempWhitePixel = 0;
-			for (midX = 0; midX < processedLocalImage.Width; ++midX)
+			for (midX = 0; midX < processedLocalImage.Height; ++midX)
 			{
-				for (int j = 0; j < processedLocalImage.Height; ++j)
+				for (int j = 0; j < processedLocalImage.Width; ++j)
 					if (Gray.Equals(processedLocalImage[midX, j], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel / 2)
@@ -471,18 +533,18 @@ namespace Automobin
 			
 			// Find midY
 			tempWhitePixel = 0;
-			for (int i = 0; i < processedLocalImage.Width; ++i)
+			for (int i = 0; i < processedLocalImage.Height; ++i)
 			{
-				for (midY = 0; midY < processedLocalImage.Height; ++midY)
+				for (midY = 0; midY < processedLocalImage.Width; ++midY)
 					if (Gray.Equals(processedLocalImage[i, midY], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel)
 					break;
 			}
 
-			trashPoint.X = midX;
-			trashPoint.Y = midY;
-			trashPoint.Depth = depthPixels[midX * bytesPerPixel + midY * stride].Depth;
+			trashPoint.X = left + midX;
+			trashPoint.Y = down + midY;
+			trashPoint.Depth = depthPixels[(left + midX) * stride + (down + midY)].Depth;
 		}
 
 		private void FindNearbyObject(DepthImagePoint[] handPoints, ref DepthImagePoint trashPoint, ref bool trashFound)
@@ -490,17 +552,28 @@ namespace Automobin
 			foreach (DepthImagePoint handPoint in handPoints)
 			{
 				// Get the binarilized local image.
-				int stride = depthFrameWidth * bytesPerPixel;
+				int stride = depthFrameHeight;
 
-				int left = trashPoint.X - localWidth / 2;
-				int down = trashPoint.Y - localHeight / 2;
+				int left = handPoint.X - localWidth / 2;
+				left = left > 0 ? left : 0;
+				int down = handPoint.Y - localHeight / 2;
+				down = down > 0 ? down : 0;
 
 				Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
-				CvInvoke.cvGetSubRect(depthFrameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+				for (int i = 0; i < localHeight; ++i)
+					for (int j = 0; j < localWidth; ++j)
+						for (int k = 0; k < 1; ++k)
+							if (left + i > depthFrameHeight || down + j > depthFrameWidth)
+								break;
+							else
+								localImage.Data[i, j, k] = depthFrameImage.Data[left + i, down + j, k];
 
 				Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
 
 				CvInvoke.cvThreshold(localImage, processedLocalImage, ObjectThreshold, BackgroundColor, Emgu.CV.CvEnum.THRESH.CV_THRESH_BINARY);
+
+				//localImage.Save("local.jpg");
+				//processedLocalImage.Save("processedLocal.jpg");
 
 				// Now both hand and trash are white.
 				// Floodfill hand into black.
@@ -508,9 +581,9 @@ namespace Automobin
 				MCvScalar objectThresholdScalar = new MCvScalar(ObjectThreshold);
 				MCvConnectedComp comp = new MCvConnectedComp();
 
-				for (int i = 0; i < processedLocalImage.Width; ++i)
-					for (int j = 0; j < processedLocalImage.Height; ++j)
-						if (depthPixels[i * stride + j * bytesPerPixel].PlayerIndex != 0)
+				for (int i = 0; i < processedLocalImage.Height; ++i)
+					for (int j = 0; j < processedLocalImage.Width; ++j)
+						if (depthPixels[(left + i) * stride + (down + j)].PlayerIndex != 0)
 							CvInvoke.cvFloodFill(processedLocalImage.Ptr, new System.Drawing.Point(i, j), black, objectThresholdScalar, objectThresholdScalar, out comp, 8, IntPtr.Zero);
 
 				int midX = 0;
@@ -555,7 +628,7 @@ namespace Automobin
 				{
 					trashPoint.X = midX;
 					trashPoint.Y = midY;
-					trashPoint.Depth = depthPixels[midX * bytesPerPixel + midY * stride].Depth;
+					trashPoint.Depth = depthPixels[(left + midX) * stride + midY].Depth;
 					return;
 				}
 			}
@@ -651,15 +724,15 @@ namespace Automobin
 		private void FindAutomobin(ref DepthImagePoint binPoint, ref bool binFound)
 		{
 			// Convert all the black pixels to pure green.
-			Image<Bgr, Int32> tempImage = colorFrameImage.Copy();
+			Image<Bgr, Byte> tempImage = colorFrameImage.Copy();
 			for(int i = 0; i < colorFrameImage.Width; ++i)
 				for(int j = 0; j < colorFrameImage.Height; ++j)
-					if(NearBlack(colorFrameImage[i, j]))
-						tempImage[i, j] = new Bgr(0, 255, 0);
+					if(NearBlack(colorFrameImage[j, i]))
+						tempImage[j, i] = new Bgr(0, 255, 0);
 
 			// Floodfill and count the sizes of green areas
 			// The largest one is Automobin
-			Image<Gray, Int32> mask = new Image<Gray, Int32>(tempImage.Width + 2, tempImage.Height + 2);
+			Image<Gray, Byte> mask = new Image<Gray, Byte>(tempImage.Width + 2, tempImage.Height + 2);
 			
 			bool[,] visited = new bool[tempImage.Width, tempImage.Height];
 			
@@ -669,13 +742,13 @@ namespace Automobin
 
 			for(int i = 0; i < tempImage.Width; ++i)
 				for(int j = 0; j < tempImage.Height; ++j)
-					if(tempImage[i, j].Green == 255)
+					if(tempImage[j, i].Green == 255)
 					{
 						MCvConnectedComp comp = new MCvConnectedComp();
 						CvInvoke.cvFloodFill(
 							tempImage,
 							new System.Drawing.Point(i, j),
-							new MCvScalar(255, 255, 255, 255),
+							new MCvScalar(255),
 							new MCvScalar(0),
 							new MCvScalar(0),
 							out comp,
@@ -699,7 +772,7 @@ namespace Automobin
 			DepthImagePoint[] depthPoints = new DepthImagePoint[tempImage.Width * tempImage.Height];
 			sensor.CoordinateMapper.MapColorFrameToDepthFrame(sensor.ColorStream.Format, sensor.DepthStream.Format, depthPixels, depthPoints);
 
-			long index = colorX * tempImage.Width + colorY;
+			long index = colorX * tempImage.Height + colorY;
 			binPoint = depthPoints[index];
 			binFound = true;
 		}
