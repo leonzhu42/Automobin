@@ -16,7 +16,9 @@ namespace Automobin
 		private Thread listenThread;
 		private Thread socketThread;
 		private Socket socket;
-		
+
+		private bool socketAccepted = false;
+
 		private string messageToSend;
 		private bool messageToSendFlag = false;
 		private string messageReceived;
@@ -44,6 +46,7 @@ namespace Automobin
 				return;
 			this.tcpListener.Start();
 			socket = tcpListener.AcceptSocket();
+			socketAccepted = true;
 			socketThread = new Thread(new ParameterizedThreadStart(HandleClientComm));
 			socketThread.Name = "Socket Thread";
 			socketThread.Start(socket);
@@ -100,13 +103,18 @@ namespace Automobin
 		public void RequestStop()
 		{
 			shouldStop = true;
+			/*
+			if (!socketAccepted)
+				listenThread.Abort();
+			else
+				listenThread.Join();
+			*/
 		}
 
 		~Server()
 		{
 			tcpListener.Stop();
-			listenThread.Abort();
-			socketThread.Abort();
+			socketThread.Join();
 		}
 	}
 }

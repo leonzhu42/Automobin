@@ -199,8 +199,7 @@ namespace Automobin
 				{
 					this.sensor.Start();
 					server = new Server();
-
-					//handler = new EventHandler<AllFramesReadyEventArgs>(SensorAllFramesReady);
+					handler = new EventHandler<AllFramesReadyEventArgs>(SensorAllFramesReady);
 				}
 				catch(IOException)
 				{
@@ -229,6 +228,7 @@ namespace Automobin
 				command.Add(new SemanticResultValue("Got trash!", "START"));
 				command.Add(new SemanticResultValue("Throwing trash!", "START"));
 				command.Add(new SemanticResultValue("Lee Guangwei", "START"));
+				command.Add(new SemanticResultValue("Liu Zhizheng", "START"));
 
 				GrammarBuilder grammarBuilder = new GrammarBuilder { Culture = recognizerInfo.Culture };
 				grammarBuilder.Append(command);
@@ -271,6 +271,13 @@ namespace Automobin
 			this.DragMove();
 		}
 
+		private void StartTracking(object sender, MouseButtonEventArgs e)
+		{
+			if(!this.sensor.SkeletonStream.IsEnabled)
+				this.sensor.SkeletonStream.Enable();
+			this.sensor.AllFramesReady += handler;
+		}
+
 		private void SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
 		{
 			const double ConfidenceThreshold = 0.3;
@@ -282,158 +289,29 @@ namespace Automobin
 					state = 0;
 					
 					// Start color, depth and skeleton
-					this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
-					this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
+					//this.sensor.ColorStream.Enable(ColorImageFormat.RgbResolution640x480Fps30);
+					//this.sensor.DepthStream.Enable(DepthImageFormat.Resolution640x480Fps30);
 					this.sensor.SkeletonStream.Enable();
 					this.depthPixels = new DepthImagePixel[this.sensor.DepthStream.FramePixelDataLength];
 
-					//this.sensor.AllFramesReady += handler;
-					ProcessNextFrame();
+					this.sensor.AllFramesReady += handler;
 				}
 			}
 		}
 
-		private void ProcessNextFrame()
-		{
-			if (state == -1)
-				return;
-
-			// Get the color
-			using (ColorImageFrame colorFrame = sensor.ColorStream.OpenNextFrame(10))
-			{
-				if (colorFrame != null)
-					colorFrameImage = colorFrame.ToOpenCVImage<Bgr, Int32>();
-				else
-					return;
-			}
-
-			// Get the skeletons
-			Skeleton[] skeletons = new Skeleton[0];
-
-			using (SkeletonFrame skeletonFrame = sensor.SkeletonStream.OpenNextFrame(10))
-			{
-				if (skeletonFrame != null)
-				{
-					skeletons = new Skeleton[skeletonFrame.SkeletonArrayLength];
-					skeletonFrame.CopySkeletonDataTo(skeletons);
-				}
-				else
-					return;
-			}
-
-			// Get the depth
-			using (DepthImageFrame depthFrame = sensor.DepthStream.OpenNextFrame(10))
-			{
-				if (depthFrame != null)
-				{
-					depthFrameWidth = depthFrame.Width;
-					depthFrameHeight = depthFrame.Height;
-					bytesPerPixel = depthFrame.BytesPerPixel;
-					// Convert the image to a Emgu image
-					depthFrameImage = depthFrame.ToOpenCVImage<Gray, Int32>();
-					// Copy the pixel data from the image to a temporary array
-					depthFrame.CopyDepthImagePixelDataTo(this.depthPixels);
-				}
-				else
-					return;
-			}
-
-			// Locate Automobin
-			DepthImagePoint binPoint = new DepthImagePoint();
-			bool binFound = false;
-			FindAutomobin(ref binPoint, ref binFound);
-
-			// Check the state
-			if (state == 0)
-			{
-				// Standby. Check whether any object nearby is at approximately the same depth as user's hand.
-				// Choose the skeleton to track
-				Skeleton skeleton = (from s in skeletons
-									 where s.TrackingState == SkeletonTrackingState.Tracked
-									 select s).FirstOrDefault();
-				if (skeleton == null)
-					return;
-				// Right hand
-				Joint rightHand = skeleton.Joints[JointType.HandRight];
-				rightHandSkeletonPoint = rightHand.Position;
-				rightHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(rightHandSkeletonPoint, sensor.DepthStream.Format);
-				// Left hand
-				Joint leftHand = skeleton.Joints[JointType.HandLeft];
-				leftHandSkeletonPoint = leftHand.Position;
-				leftHandDepthPoint = sensor.CoordinateMapper.MapSkeletonPointToDepthPoint(leftHandSkeletonPoint, sensor.DepthStream.Format);
-
-				DepthImagePoint[] handDepthPoints = { rightHandDepthPoint, leftHandDepthPoint };
-
-				// Look for object nearby
-				bool trashFound = false;
-				FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
-				if (trashFound)
-				{
-					currentStopwatch = new Stopwatch();
-					currentStopwatch.Start();
-					trashDepthPoints = new List<DepthImagePoint>();
-					trashDepthPoints.Add(trashDepthPoint);
-					velocities = new List<Velocity>();
-					landingPoints = new List<DepthImagePoint>();
-					frameTimes = new List<long>();
-					state = 1;
-				}
-			}
-			else
-			{
-				// Running. Keep tracking the object, communicate with the bin, until caught by the bin.
-				currentStopwatch.Stop();
-				long time = currentStopwatch.ElapsedMilliseconds;
-				currentStopwatch.Restart();
-				UpdateTrashLocation(ref trashDepthPoint);
-				DepthImagePoint lastTrashDepthPoint = trashDepthPoints[trashDepthPoints.Count - 1];
-				Velocity velocity = new Velocity(
-					lastTrashDepthPoint.X,
-					lastTrashDepthPoint.Y,
-					lastTrashDepthPoint.Depth,
-					trashDepthPoint.X,
-					trashDepthPoint.Y,
-					trashDepthPoint.Depth,
-					time);
-				trashDepthPoints.Add(trashDepthPoint);
-				frameTimes.Add(time);
-
-				DepthImagePoint landingPoint = PredictLandingPoint();
-
-				if (!binFound)
-					SendLocationToBin(landingPoint);
-				else
-					SendLocationToBin(landingPoint, binPoint);
-
-				if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
-				{
-					currentStopwatch.Stop();
-					trashDepthPoints.Clear();
-					velocities.Clear();
-					landingPoints.Clear();
-
-					this.sensor.ColorStream.Disable();
-					this.sensor.DepthStream.Disable();
-					this.sensor.SkeletonStream.Disable();
-					//this.sensor.AllFramesReady -= handler;
-					state = -1;
-				}
-			}
-		}
-
-		/*
 		private void SensorAllFramesReady(object sender, AllFramesReadyEventArgs e)
 		{
 			if (state == -1)
 				return;
 			
 			// Get the color
+			bool colorRetrieved = true;
 			using(ColorImageFrame colorFrame = e.OpenColorImageFrame())
 			{
 				if (colorFrame != null)
 					colorFrameImage = colorFrame.ToOpenCVImage<Bgr, Int32>();
 				else
-					return;
+					colorRetrieved = false;
 			}
 
 			// Get the skeletons
@@ -467,10 +345,13 @@ namespace Automobin
 					return;
 			}
 
-			// Locate Automobin
 			DepthImagePoint binPoint = new DepthImagePoint();
 			bool binFound = false;
-			FindAutomobin(ref binPoint, ref binFound);
+			if (colorRetrieved)
+			{
+				// Locate Automobin
+				FindAutomobin(ref binPoint, ref binFound);
+			}
 
 			// Check the state
 			if (state == 0)
@@ -548,7 +429,6 @@ namespace Automobin
 				}
 			}
 		}
-		*/
 		
 		private void UpdateTrashLocation(ref DepthImagePoint trashPoint)
 		{

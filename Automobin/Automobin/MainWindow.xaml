@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Automobin.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Skeleton Tracking" Icon="Icon.ico" Height="119" Width="600" Loaded="WindowLoaded" Closing="WindowClosing" AllowsTransparency="True" WindowStyle="None" MouseLeftButtonDown="DragWindow" KeyDown="Window_KeyDown" KeyUp="Window_KeyUp" ShowInTaskbar="False" ResizeMode="NoResize">
+        Title="Skeleton Tracking" Icon="Icon.ico" Height="119" Width="600" Loaded="WindowLoaded" Closing="WindowClosing" AllowsTransparency="True" WindowStyle="None" MouseLeftButtonDown="DragWindow" MouseDoubleClick="StartTracking" KeyDown="Window_KeyDown" KeyUp="Window_KeyUp" ShowInTaskbar="False" ResizeMode="NoResize">
 
 	<Window.Resources>
 		<SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e"/>
