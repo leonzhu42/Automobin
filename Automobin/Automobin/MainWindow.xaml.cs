@@ -72,8 +72,8 @@ namespace Automobin
 		private Image<Gray, Byte> depthFrameImage;
 		
 		//Local image
-		private int localWidth = 50;
-		private int localHeight = 50;
+		private static int LocalWidth = 50;
+		private static int LocalHeight = 50;
 		
 		// Hand Positions
 		private DepthImagePoint rightHandDepthPoint;
@@ -424,6 +424,8 @@ namespace Automobin
 					return;
 				}
 
+				titleLabel.Content = "I see U";
+
 				// Right hand
 				Joint rightHand = skeleton.Joints[JointType.HandRight];
 				rightHandSkeletonPoint = rightHand.Position;
@@ -440,6 +442,8 @@ namespace Automobin
 				FindNearbyObject(handDepthPoints, ref trashDepthPoint, ref trashFound);
 				if (trashFound)
 				{
+					titleLabel.Content = "I see Trash";
+
 					currentStopwatch = new Stopwatch();
 					currentStopwatch.Start();
 					trashDepthPoints = new List<DepthImagePoint>();
@@ -477,7 +481,7 @@ namespace Automobin
 				else
 					SendLocationToBin(landingPoint, binPoint);
 
-				if (System.Math.Abs(landingPoint.Y) <= LandingThreshold)
+				if (System.Math.Abs(landingPoint.Depth) <= LandingThreshold)
 				{
 					currentStopwatch.Stop();
 					trashDepthPoints.Clear();
@@ -488,6 +492,10 @@ namespace Automobin
 					this.sensor.SkeletonStream.Disable();
 					this.sensor.AllFramesReady -= handler;
 					state = -1;
+
+					titleLabel.Content = "Automobin";
+
+					File.AppendAllText("log.txt", "end" + Environment.NewLine);
 				}
 			}
 		}
@@ -496,12 +504,26 @@ namespace Automobin
 		{
 			// Get the binarilized local image.
 			int stride = depthFrameWidth;
-			
-			int left = trashPoint.X - localWidth / 2;
-			int down = trashPoint.Y - localHeight / 2;
+
+			//Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
+			//CvInvoke.cvGetSubRect(depthFrameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+
+			int left = trashPoint.X - LocalWidth / 2;
+			left = left > 0 ? left : 0;
+			int down = trashPoint.Y - LocalHeight / 2;
+			down = down > 0 ? down : 0;
+
+			int localWidth = left + LocalWidth < depthFrameWidth ? LocalWidth : depthFrameWidth;
+			int localHeight = down + LocalHeight < depthFrameHeight ? LocalHeight : depthFrameHeight;
 
 			Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
-			CvInvoke.cvGetSubRect(depthFrameImage, localImage, new System.Drawing.Rectangle(left, down, localWidth, localHeight));
+			for (int i = 0; i < localHeight; ++i)
+				for (int j = 0; j < localWidth; ++j)
+					for (int k = 0; k < 1; ++k)
+						if (down + i > depthFrameHeight || left + j > depthFrameWidth)
+							break;
+						else
+							localImage.Data[i, j, k] = depthFrameImage.Data[down + i, left + j, k];
 
 			Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
 
@@ -522,10 +544,10 @@ namespace Automobin
 
 			// Find midX
 			tempWhitePixel = 0;
-			for (midX = 0; midX < processedLocalImage.Height; ++midX)
+			for (midX = 0; midX < processedLocalImage.Width; ++midX)
 			{
-				for (int j = 0; j < processedLocalImage.Width; ++j)
-					if (Gray.Equals(processedLocalImage[midX, j], white))
+				for (int j = 0; j < processedLocalImage.Height; ++j)
+					if (Gray.Equals(processedLocalImage.Data[j, midX, 0], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel / 2)
 					break;
@@ -533,18 +555,18 @@ namespace Automobin
 			
 			// Find midY
 			tempWhitePixel = 0;
-			for (int i = 0; i < processedLocalImage.Height; ++i)
+			for (int i = 0; i < processedLocalImage.Width; ++i)
 			{
-				for (midY = 0; midY < processedLocalImage.Width; ++midY)
-					if (Gray.Equals(processedLocalImage[i, midY], white))
+				for (midY = 0; midY < processedLocalImage.Height; ++midY)
+					if (Gray.Equals(processedLocalImage.Data[midY, i, 0], white))
 						tempWhitePixel++;
 				if (tempWhitePixel > whitePixel)
 					break;
 			}
 
-			trashPoint.X = left + midX;
-			trashPoint.Y = down + midY;
-			trashPoint.Depth = depthPixels[(left + midX) * stride + (down + midY)].Depth;
+			trashPoint.X = midX;
+			trashPoint.Y = midY;
+			trashPoint.Depth = depthPixels[(midX + left) + midY * stride].Depth;
 		}
 
 		private void FindNearbyObject(DepthImagePoint[] handPoints, ref DepthImagePoint trashPoint, ref bool trashFound)
@@ -552,21 +574,24 @@ namespace Automobin
 			foreach (DepthImagePoint handPoint in handPoints)
 			{
 				// Get the binarilized local image.
-				int stride = depthFrameHeight;
+				int stride = depthFrameWidth;
 
-				int left = handPoint.X - localWidth / 2;
+				int left = handPoint.X - LocalWidth / 2;
 				left = left > 0 ? left : 0;
-				int down = handPoint.Y - localHeight / 2;
+				int down = handPoint.Y - LocalHeight / 2;
 				down = down > 0 ? down : 0;
+
+				int localWidth = left + LocalWidth < depthFrameWidth ? LocalWidth : depthFrameWidth;
+				int localHeight = down + LocalHeight < depthFrameHeight ? LocalHeight : depthFrameHeight; 
 
 				Image<Gray, Byte> localImage = new Image<Gray, Byte>(localWidth, localHeight);
 				for (int i = 0; i < localHeight; ++i)
 					for (int j = 0; j < localWidth; ++j)
 						for (int k = 0; k < 1; ++k)
-							if (left + i > depthFrameHeight || down + j > depthFrameWidth)
+							if (down + i > depthFrameHeight || left + j > depthFrameWidth)
 								break;
 							else
-								localImage.Data[i, j, k] = depthFrameImage.Data[left + i, down + j, k];
+								localImage.Data[i, j, k] = depthFrameImage.Data[down + i, left + j, k];
 
 				Image<Gray, Byte> processedLocalImage = new Image<Gray, Byte>(localWidth, localHeight);
 
@@ -583,7 +608,7 @@ namespace Automobin
 
 				for (int i = 0; i < processedLocalImage.Height; ++i)
 					for (int j = 0; j < processedLocalImage.Width; ++j)
-						if (depthPixels[(left + i) * stride + (down + j)].PlayerIndex != 0)
+						if (depthPixels[(down + i) * stride + (left + j)].PlayerIndex != 0)
 							CvInvoke.cvFloodFill(processedLocalImage.Ptr, new System.Drawing.Point(i, j), black, objectThresholdScalar, objectThresholdScalar, out comp, 8, IntPtr.Zero);
 
 				int midX = 0;
@@ -592,9 +617,9 @@ namespace Automobin
 
 				// Count the total white pixel number.
 				int whitePixel = 0;
-				for (int i = 0; i < processedLocalImage.Width; ++i)
-					for (int j = 0; j < processedLocalImage.Height; ++j)
-						if (Gray.Equals(processedLocalImage[i, j], white))
+				for (int i = 0; i < processedLocalImage.Height; ++i)
+					for (int j = 0; j < processedLocalImage.Width; ++j)
+						if (Gray.Equals(processedLocalImage.Data[i, j, 0], white))
 						{
 							whitePixel++;
 							trashFound = true;
@@ -607,7 +632,7 @@ namespace Automobin
 				for (midX = 0; midX < processedLocalImage.Width; ++midX)
 				{
 					for (int j = 0; j < processedLocalImage.Height; ++j)
-						if (Gray.Equals(processedLocalImage[midX, j], white))
+						if (Gray.Equals(processedLocalImage.Data[j, midX, 0], white))
 							tempWhitePixel++;
 					if (tempWhitePixel > whitePixel / 2)
 						break;
@@ -618,7 +643,7 @@ namespace Automobin
 				for (int i = 0; i < processedLocalImage.Width; ++i)
 				{
 					for (midY = 0; midY < processedLocalImage.Height; ++midY)
-						if (Gray.Equals(processedLocalImage[i, midY], white))
+						if (Gray.Equals(processedLocalImage.Data[midY, i, 0], white))
 							tempWhitePixel++;
 					if (tempWhitePixel > whitePixel)
 						break;
@@ -628,7 +653,7 @@ namespace Automobin
 				{
 					trashPoint.X = midX;
 					trashPoint.Y = midY;
-					trashPoint.Depth = depthPixels[(left + midX) * stride + midY].Depth;
+					trashPoint.Depth = depthPixels[(left + midX) + stride * midY].Depth;
 					return;
 				}
 			}
@@ -684,9 +709,12 @@ namespace Automobin
 			string message = stringWriter.GetStringBuilder().ToString();
 			*/
 
-			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Depth + "}";
+			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Y + "}";
 
-			server.Message = message;
+			if (server != null)
+				server.Message = message;
+			else
+				File.AppendAllText("log.txt", message + Environment.NewLine);
 		}
 
 		private void SendLocationToBin(DepthImagePoint landingPoint, DepthImagePoint binPoint)
@@ -716,7 +744,7 @@ namespace Automobin
 			string message = stringWriter.GetStringBuilder().ToString();
 			*/
 
-			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Depth + ",\"binx\":" + binPoint.X + ",\"biny\":" + binPoint.Depth + "}";
+			string message = "{\"x\":" + landingPoint.X + ",\"y\":" + landingPoint.Y + ",\"binx\":" + binPoint.X + ",\"biny\":" + binPoint.Y + "}";
 
 			server.Message = message;
 		}
